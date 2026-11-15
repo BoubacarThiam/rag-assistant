@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     max_files_per_upload: int = Field(default=10, gt=0)
     chunk_size_tokens: int = Field(default=450, gt=0)
     chunk_overlap_tokens: int = Field(default=75, ge=0)
+    # Prepend the document title to each chunk before embedding it (see ingestion/context.py).
+    embed_document_title: bool = False
 
     # --- Retrieval / chat ---
     retrieval_top_k: int = Field(default=5, gt=0, le=50)

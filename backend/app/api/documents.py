@@ -103,7 +103,13 @@ async def upload_documents(
     for document, upload in zip(documents, uploads, strict=True):
         logger.info("Document registered: id=%s file=%s", document.id, document.filename)
         background_tasks.add_task(
-            ingest_document, document.id, upload.data, session_factory, embedder, settings
+            ingest_document,
+            document.id,
+            upload.data,
+            session_factory,
+            embedder,
+            settings,
+            document.filename,
         )
     return documents
 

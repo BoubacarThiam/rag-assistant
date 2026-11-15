@@ -17,6 +17,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Protocol
 
 from app.core.config import get_settings
+from app.services.ingestion.context import contextualize
 from app.services.retrieval.types import SearchHit
 
 if TYPE_CHECKING:
@@ -71,7 +72,9 @@ class FakeReranker:
 
 def rerank(reranker: Reranker, query: str, hits: list[SearchHit], k: int) -> list[SearchHit]:
     """Re-order `hits` by the reranker's score and keep the best k (ties keep search order)."""
-    scores = reranker.score(query, [hit.content for hit in hits])
+    # The reranker reads each passage with its document title, for the same reason as embeddings.
+    passages = [contextualize(hit.document_name, hit.content) for hit in hits]
+    scores = reranker.score(query, passages)
     order = sorted(range(len(hits)), key=lambda i: scores[i], reverse=True)
     return [replace(hits[i], score=scores[i]) for i in order[:k]]
 

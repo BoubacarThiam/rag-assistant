@@ -43,6 +43,8 @@ def _format(key: str, value: Any) -> str:
 def _describe(config: dict[str, Any]) -> str:
     parts = [f"{config['chunk_size_tokens']}/{config['chunk_overlap_tokens']} tokens",
              f"{config['chunks']} passages", config["mode"]]  # fmt: skip
+    if config.get("embed_document_title"):
+        parts.append("titre")
     if config.get("reranker"):
         parts.append(f"rerank {config['rerank_candidates']}")
     return ", ".join(parts)

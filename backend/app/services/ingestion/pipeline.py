@@ -18,6 +18,7 @@ from app.models import Chunk, Document, DocumentStatus
 from app.services.embeddings.base import EmbeddingProvider
 from app.services.ingestion.chunking import ChunkDraft, chunk_pages
 from app.services.ingestion.cleaning import clean_pages
+from app.services.ingestion.context import contextualize
 from app.services.ingestion.extraction import PdfExtractionError, extract_pages
 
 logger = logging.getLogger(__name__)
@@ -38,8 +39,14 @@ class ProcessedDocument:
 
 
 def process_pdf(
-    data: bytes, embedder: EmbeddingProvider, chunk_size: int, overlap: int, batch_size: int
+    data: bytes,
+    embedder: EmbeddingProvider,
+    chunk_size: int,
+    overlap: int,
+    batch_size: int,
+    title_from: str | None = None,
 ) -> ProcessedDocument:
+    """`title_from`: file name whose title is prepended to each chunk for the embedding only."""
     pages = clean_pages(extract_pages(data))
     if not any(page.text for page in pages):
         raise PdfExtractionError(NO_TEXT_MESSAGE)
@@ -49,7 +56,10 @@ def process_pdf(
     # Batch by batch: between batches, other requests (searches) can use the model.
     for start in range(0, len(chunks), batch_size):
         batch = chunks[start : start + batch_size]
-        embeddings.extend(embedder.embed_documents([chunk.text for chunk in batch]))
+        texts = [
+            contextualize(title_from, chunk.text) if title_from else chunk.text for chunk in batch
+        ]
+        embeddings.extend(embedder.embed_documents(texts))
     return ProcessedDocument(page_count=len(pages), chunks=chunks, embeddings=embeddings)
 
 
@@ -71,6 +81,7 @@ async def ingest_document(
     session_factory: async_sessionmaker[AsyncSession],
     embedder: EmbeddingProvider,
     settings: Settings,
+    filename: str | None = None,
 ) -> None:
     start = time.perf_counter()
     logger.info("Ingestion started: document=%s size=%d bytes", document_id, len(data))
@@ -82,6 +93,7 @@ async def ingest_document(
             settings.chunk_size_tokens,
             settings.chunk_overlap_tokens,
             settings.embedding_batch_size,
+            filename if settings.embed_document_title else None,
         )
         async with session_factory() as session:
             document = await session.get(Document, document_id)

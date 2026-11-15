@@ -50,6 +50,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         help="activer/désactiver le reranking (défaut : RERANK_ENABLED)",
     )
+    parser.add_argument(
+        "--title-context",
+        action=argparse.BooleanOptionalAction,
+        help="ajouter le titre du document à chaque passage (EMBED_DOCUMENT_TITLE)",
+    )
     parser.add_argument("--candidates", type=int, help="passages reclassés (RERANK_CANDIDATES)")
     parser.add_argument("--limit", type=int, help="n'évaluer que les N premières questions")
     parser.add_argument("--concurrency", type=int, default=4)
@@ -91,6 +96,7 @@ async def main(argv: list[str] | None = None) -> int:
         "chunk_overlap_tokens": args.chunk_overlap,
         "rerank_enabled": args.rerank,
         "rerank_candidates": args.candidates,
+        "embed_document_title": args.title_context,
     }
     # Command-line options override .env for this run only (to compare configurations).
     settings = get_settings().model_copy(
@@ -133,6 +139,7 @@ async def main(argv: list[str] | None = None) -> int:
         "chunk_size_tokens": settings.chunk_size_tokens,
         "chunk_overlap_tokens": settings.chunk_overlap_tokens,
         "chunks": chunks,
+        "embed_document_title": settings.embed_document_title,
         "reranker": settings.reranker_model if settings.rerank_enabled else None,
         "rerank_candidates": settings.rerank_candidates if settings.rerank_enabled else None,
         "embedding_model": settings.embedding_model,

@@ -67,6 +67,7 @@ class MemoryBackend:
                 self._settings.chunk_size_tokens,
                 self._settings.chunk_overlap_tokens,
                 self._settings.embedding_batch_size,
+                path.name if self._settings.embed_document_title else None,
             )
             document_id = uuid.uuid4()
             for chunk, embedding in zip(result.chunks, result.embeddings, strict=True):
@@ -172,7 +173,9 @@ class PgBackend:
                 session.add(document)
                 await session.commit()
             # The application's own ingestion, exactly as after an upload.
-            await ingest_document(document.id, data, self._sessions, self._embedder, self._settings)
+            await ingest_document(
+                document.id, data, self._sessions, self._embedder, self._settings, path.name
+            )
 
         async with self._sessions() as session:
             failed = list(

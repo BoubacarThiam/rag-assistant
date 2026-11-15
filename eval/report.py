@@ -134,7 +134,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Moteur de recherche : {config['backend']} (mode `{config['mode']}`, k = {k})",
         f"- Découpage : {config['chunk_size_tokens']} tokens, chevauchement "
         f"{config['chunk_overlap_tokens']} ; {config['chunks']} passages indexés",
-        f"- Embeddings : `{config['embedding_model']}`",
+        f"- Embeddings : `{config['embedding_model']}`"
+        + (
+            " (titre du document ajouté à chaque passage)"
+            if config.get("embed_document_title")
+            else ""
+        ),
         f"- Reranking : {_reranking(config)}",
         f"- Modèle de réponse : `{config['llm_model']}` ; juge : `{config['judge_model']}`",
         f"- Questions : {config['questions']} ({config['answerable']} avec réponse, "
