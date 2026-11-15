@@ -17,9 +17,11 @@ k = 5, moteur en mémoire (cosinus exact, sans pgvector). Avec 23 questions, **u
 | Hit rate@5 | 95,7 % | **100 %** |
 | MRR | 0,848 | **0,906** |
 | Rappel des preuves | 93,5 % | **100 %** |
-| Temps de recherche médian | 256 ms | 252 ms |
+| Temps de recherche médian | 0,26 s | 0,25 à 0,62 s |
 
-Rapports : `exp-chunks-450` (avant) et `v2-recherche` (après).
+Rapports : `exp-chunks-450` (avant), `exp-titre-450` et `v2-recherche` (après, même
+configuration mesurée deux fois). Les scores sont identiques entre les deux mesures ; seul le
+temps varie, selon la charge de la machine. Le titre n'ajoute aucune étape à la recherche.
 
 ## 1. Taille des passages : l'hypothèse était fausse
 
