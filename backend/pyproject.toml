@@ -41,6 +41,8 @@ explicit = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# ".." makes the repository-level `eval` package importable in tests.
+pythonpath = [".", ".."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
@@ -63,8 +65,8 @@ known-third-party = ["alembic"]
 python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["app"]
+files = ["app", "../eval"]
 
 [[tool.mypy.overrides]]
-module = ["pgvector.*", "pymupdf.*", "fitz.*", "sentence_transformers.*"]
+module = ["pgvector.*", "pymupdf.*", "fitz.*", "sentence_transformers.*", "asyncpg.*"]
 ignore_missing_imports = true

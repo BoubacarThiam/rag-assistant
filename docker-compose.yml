@@ -27,12 +27,14 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rag}:${POSTGRES_PASSWORD:-rag}@db:5432/${POSTGRES_DB:-rag}
       TEST_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rag}:${POSTGRES_PASSWORD:-rag}@db:5432/rag_test
+      EVAL_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rag}:${POSTGRES_PASSWORD:-rag}@db:5432/rag_eval
     # Dev mode: migrations, then auto-reload on code changes.
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./eval:/app/eval # evaluation suite: docker compose exec api python -m eval.run
       - hf_cache:/root/.cache/huggingface
     depends_on:
       db:

@@ -30,6 +30,9 @@ class AnthropicProvider:
         self._max_tokens = max_tokens
         self._effort = effort
         self._refusal_fallback = refusal_fallback
+        # Running totals, read by the evaluation script to report token usage.
+        self.input_tokens = 0
+        self.output_tokens = 0
 
     def _request(self, system: str, messages: list[ChatMessage]) -> dict[str, Any]:
         request: dict[str, Any] = {
@@ -79,6 +82,8 @@ class AnthropicProvider:
                 raise
             raise LLMError(MISSING_KEY_MESSAGE, "llm_auth") from exc
 
+        self.input_tokens += final.usage.input_tokens
+        self.output_tokens += final.usage.output_tokens
         logger.info(
             "LLM done: model=%s stop=%s input_tokens=%d output_tokens=%d",
             final.model,

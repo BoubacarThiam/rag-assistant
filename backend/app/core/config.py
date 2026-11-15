@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # --- Database ---
     database_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag"
     test_database_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag_test"
+    # Separate database filled by `python -m eval.run` (created automatically).
+    eval_database_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag_eval"
 
     # --- LLM (Claude) ---
     anthropic_api_key: SecretStr | None = None
