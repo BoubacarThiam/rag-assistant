@@ -82,6 +82,11 @@ docker compose exec api python -m eval.run      # évaluation
 # Hors Docker (depuis backend/) : uv sync, puis
 uv run pytest            # les tests d'intégration sont "skipped" si Postgres est injoignable
 uv run ruff check . && uv run ruff format --check . && uv run mypy
+
+# Frontend sans backend (depuis frontend/) : API de démonstration + Vite
+npm run mock             # terminal 1 : fausse API sur :8000 (données d'exemple)
+npm run dev              # terminal 2 : http://localhost:5173
+npm test && npm run typecheck
 ```
 
 ## Méthode de travail
