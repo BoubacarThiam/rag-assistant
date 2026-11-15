@@ -78,6 +78,10 @@ docker compose exec api alembic upgrade head    # migrations
 docker compose exec api pytest                  # tests backend
 cd frontend && npm test                         # tests frontend
 docker compose exec api python -m eval.run      # évaluation
+
+# Hors Docker (depuis backend/) : uv sync, puis
+uv run pytest            # les tests d'intégration sont "skipped" si Postgres est injoignable
+uv run ruff check . && uv run ruff format --check . && uv run mypy
 ```
 
 ## Méthode de travail
