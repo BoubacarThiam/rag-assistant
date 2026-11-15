@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import documents, health, search
+from app.api import chat, documents, health, search
 from app.core.config import get_settings
 from app.core.db import SessionLocal, engine
 from app.core.errors import register_error_handlers
@@ -66,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(documents.router)
     app.include_router(search.router)
+    app.include_router(chat.router)
     return app
 
 

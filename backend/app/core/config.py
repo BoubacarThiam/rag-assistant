@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr | None = None
     llm_model: str = "claude-opus-5-5"
     judge_model: str = "claude-opus-5-5"
+    # Upper bound for one answer (thinking + text). Generous: hitting it truncates the answer.
+    llm_max_tokens: int = Field(default=64000, gt=0)
+    # Thinking depth / token spend. Empty = let the model use its default
+    # (required for older models that reject the parameter).
+    llm_effort: Literal["", "low", "medium", "high", "xhigh", "max"] = "medium"
+    # If a safety classifier declines a request, let the API retry it on a fallback model.
+    # Turn off for models that do not support server-side fallbacks (e.g. Haiku).
+    llm_refusal_fallback: bool = True
 
     # --- Embeddings ---
     embedding_model: str = "intfloat/multilingual-e5-base"
