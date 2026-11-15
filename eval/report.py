@@ -4,7 +4,7 @@ import json
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from statistics import mean
+from statistics import mean, median
 from typing import Any
 
 from eval.dataset import QUESTION_TYPES
@@ -92,6 +92,8 @@ def build_report(
     results: list[CaseResult], *, config: dict[str, Any], k: int, usage: dict[str, Any]
 ) -> dict[str, Any]:
     retrieval = aggregate_retrieval([r.retrieval for r in results if r.retrieval], k)
+    # Median: robust to the first query, which pays for loading the models.
+    retrieval["search_ms_median"] = round(median(r.search_ms for r in results), 1)
     generation_ran = any(r.answer is not None or r.error for r in results)
     return {
         "config": config,
@@ -115,6 +117,12 @@ def _num(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.3f}"
 
 
+def _reranking(config: dict[str, Any]) -> str:
+    if not config.get("reranker"):
+        return "non"
+    return f"`{config['reranker']}` sur {config['rerank_candidates']} candidats"
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     config, retrieval, generation = report["config"], report["retrieval"], report["generation"]
     k = config["k"]
@@ -127,6 +135,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Découpage : {config['chunk_size_tokens']} tokens, chevauchement "
         f"{config['chunk_overlap_tokens']} ; {config['chunks']} passages indexés",
         f"- Embeddings : `{config['embedding_model']}`",
+        f"- Reranking : {_reranking(config)}",
         f"- Modèle de réponse : `{config['llm_model']}` ; juge : `{config['judge_model']}`",
         f"- Questions : {config['questions']} ({config['answerable']} avec réponse, "
         f"{config['unanswerable']} sans réponse dans les documents)",
@@ -144,6 +153,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines += [
         f"| MRR | {_num(retrieval.get('mrr'))} |",
         f"| Rappel des preuves | {_pct(retrieval.get('evidence_recall'))} |",
+        f"| Temps de recherche médian | {retrieval.get('search_ms_median', 'n/a')} ms |",
         "",
     ]
 

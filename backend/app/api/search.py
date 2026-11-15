@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.deps import EmbedderDep, SessionDep, SettingsDep
+from app.api.deps import EmbedderDep, RerankerDep, SessionDep, SettingsDep
 from app.schemas.search import SearchRequest, SearchResponse, SearchResultOut
 from app.services.retrieval import search
 
@@ -9,7 +9,11 @@ router = APIRouter(tags=["search"])
 
 @router.post("/search", response_model=SearchResponse)
 async def search_chunks(
-    request: SearchRequest, session: SessionDep, embedder: EmbedderDep, settings: SettingsDep
+    request: SearchRequest,
+    session: SessionDep,
+    embedder: EmbedderDep,
+    settings: SettingsDep,
+    reranker: RerankerDep,
 ) -> SearchResponse:
     """Top-k passages for a question, with their similarity score."""
     k = request.k or settings.retrieval_top_k
@@ -22,6 +26,7 @@ async def search_chunks(
         k=k,
         mode=mode,
         document_ids=request.document_ids,
+        reranker=reranker,
     )
     return SearchResponse(
         query=request.query,

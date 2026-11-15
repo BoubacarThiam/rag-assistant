@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ PASS_THRESHOLD = 4  # minimum judge score (out of 5) on faithfulness and correct
 class CaseResult:
     question: Question
     hits: list[SearchHit] = field(default_factory=list)
+    search_ms: float = 0.0
     retrieval: RetrievalResult | None = None  # None for unanswerable questions
     answer: str | None = None  # None when generation was not run
     checks: AnswerChecks | None = None
@@ -112,7 +114,9 @@ async def evaluate_question(
     judge: Judge | None,
 ) -> CaseResult:
     result = CaseResult(question)
+    start = time.perf_counter()
     result.hits = await backend.search(question.question, k, mode)
+    result.search_ms = (time.perf_counter() - start) * 1000
     if question.answerable:
         result.retrieval = score_retrieval(question, result.hits)
     if llm is None:

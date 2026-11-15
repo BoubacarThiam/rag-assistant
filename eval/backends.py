@@ -27,7 +27,7 @@ from app.core.config import Settings
 from app.models import Document, DocumentStatus
 from app.services.embeddings.base import EmbeddingProvider
 from app.services.ingestion.pipeline import ingest_document, process_pdf
-from app.services.retrieval import SearchHit, SearchMode, search
+from app.services.retrieval import Reranker, SearchHit, SearchMode, rerank, search
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,12 @@ class Backend(Protocol):
 class MemoryBackend:
     name = "memory (cosinus exact, sans pgvector)"
 
-    def __init__(self, embedder: EmbeddingProvider, settings: Settings) -> None:
+    def __init__(
+        self, embedder: EmbeddingProvider, settings: Settings, reranker: Reranker | None = None
+    ) -> None:
         self._embedder = embedder
         self._settings = settings
+        self._reranker = reranker
         self._hits: list[SearchHit] = []
         self._matrix = np.zeros((0, 0), dtype=np.float32)
 
@@ -91,8 +94,13 @@ class MemoryBackend:
         )
         # Vectors are normalized, so the dot product is the cosine similarity.
         scores = self._matrix @ query_vector
-        best = np.argsort(-scores)[:k]
-        return [replace(self._hits[i], score=float(scores[i])) for i in best]
+        # Same two steps as the application's `search`: candidates, then optional reranking.
+        fetch = max(k, self._settings.rerank_candidates) if self._reranker else k
+        best = np.argsort(-scores, kind="stable")[:fetch]
+        hits = [replace(self._hits[i], score=float(scores[i])) for i in best]
+        if self._reranker:
+            hits = await asyncio.to_thread(rerank, self._reranker, query, hits, k)
+        return hits
 
     async def close(self) -> None:
         return None
@@ -116,9 +124,12 @@ async def database_reachable(url: str) -> bool:
 class PgBackend:
     name = "postgresql + pgvector"
 
-    def __init__(self, embedder: EmbeddingProvider, settings: Settings) -> None:
+    def __init__(
+        self, embedder: EmbeddingProvider, settings: Settings, reranker: Reranker | None = None
+    ) -> None:
         self._embedder = embedder
         self._settings = settings
+        self._reranker = reranker
         self._url = settings.eval_database_url
         self._engine = create_async_engine(self._url)
         self._sessions: async_sessionmaker[AsyncSession] = async_sessionmaker(
@@ -176,7 +187,10 @@ class PgBackend:
 
     async def search(self, query: str, k: int, mode: SearchMode) -> list[SearchHit]:
         async with self._sessions() as session:
-            return await search(session, self._embedder, self._settings, query, k=k, mode=mode)
+            return await search(
+                session, self._embedder, self._settings, query,
+                k=k, mode=mode, reranker=self._reranker,
+            )  # fmt: skip
 
     async def close(self) -> None:
         await self._engine.dispose()

@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     # Hybrid search: candidates fetched from each method before fusion, and RRF constant.
     hybrid_candidates: int = Field(default=20, gt=0, le=200)
     rrf_k: int = Field(default=60, gt=0)
+    # Reranking: a cross-encoder re-orders the first `rerank_candidates` results.
+    rerank_enabled: bool = False
+    reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    rerank_candidates: int = Field(default=20, gt=0, le=200)
     chat_history_messages: int = Field(default=6, ge=0)
 
     @property

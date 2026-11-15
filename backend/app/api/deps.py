@@ -13,13 +13,15 @@ from app.services.chat import Retriever
 from app.services.conversations import ConversationStore, SqlConversationStore
 from app.services.embeddings import EmbeddingProvider, get_embedding_provider
 from app.services.llm import LLMProvider, get_llm_provider
-from app.services.retrieval import SearchHit, search
+from app.services.retrieval import Reranker, SearchHit, search
+from app.services.retrieval.reranker import get_reranker
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 EmbedderDep = Annotated[EmbeddingProvider, Depends(get_embedding_provider)]
 LLMDep = Annotated[LLMProvider, Depends(get_llm_provider)]
+RerankerDep = Annotated[Reranker | None, Depends(get_reranker)]
 
 
 def get_conversation_store(session_factory: SessionFactoryDep) -> ConversationStore:
@@ -27,7 +29,10 @@ def get_conversation_store(session_factory: SessionFactoryDep) -> ConversationSt
 
 
 def get_retriever(
-    session_factory: SessionFactoryDep, embedder: EmbedderDep, settings: SettingsDep
+    session_factory: SessionFactoryDep,
+    embedder: EmbedderDep,
+    settings: SettingsDep,
+    reranker: RerankerDep,
 ) -> Retriever:
     async def retrieve(query: str, document_ids: Sequence[uuid.UUID] | None) -> list[SearchHit]:
         # Own short session: released before the (long) LLM stream starts.
@@ -40,6 +45,7 @@ def get_retriever(
                 k=settings.retrieval_top_k,
                 mode=settings.retrieval_mode,
                 document_ids=document_ids,
+                reranker=reranker,
             )
 
     return retrieve

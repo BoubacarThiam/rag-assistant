@@ -53,7 +53,13 @@ async def test_returns_results_with_defaults(
         "content": HIT.content,
         "score": 0.83,
     }
-    assert calls[0] == {"query": "congés", "k": 5, "mode": "vector", "document_ids": None}
+    assert calls[0] == {
+        "query": "congés",
+        "k": 5,
+        "mode": "vector",
+        "document_ids": None,
+        "reranker": None,
+    }
 
 
 async def test_passes_options_through(client: AsyncClient, calls: list[dict[str, Any]]) -> None:

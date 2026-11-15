@@ -20,6 +20,7 @@ from typing import Any
 from app.core.config import Settings, get_settings
 from app.services.embeddings import get_embedding_provider
 from app.services.llm import AnthropicProvider, get_llm_provider
+from app.services.retrieval.reranker import CrossEncoderReranker
 from eval import EVAL_DIR, PDF_DIR, REPORTS_DIR
 from eval.backends import Backend, MemoryBackend, PgBackend, database_reachable
 from eval.dataset import load_questions
@@ -42,6 +43,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="pg = PostgreSQL/pgvector ; memory = sans base (mode vector seulement)",
     )
     parser.add_argument("--retrieval-only", action="store_true", help="ne pas appeler Claude")
+    parser.add_argument("--chunk-size", type=int, help="défaut : CHUNK_SIZE_TOKENS")
+    parser.add_argument("--chunk-overlap", type=int, help="défaut : CHUNK_OVERLAP_TOKENS")
+    parser.add_argument(
+        "--rerank",
+        action=argparse.BooleanOptionalAction,
+        help="activer/désactiver le reranking (défaut : RERANK_ENABLED)",
+    )
+    parser.add_argument("--candidates", type=int, help="passages reclassés (RERANK_CANDIDATES)")
     parser.add_argument("--limit", type=int, help="n'évaluer que les N premières questions")
     parser.add_argument("--concurrency", type=int, default=4)
     return parser.parse_args(argv)
@@ -64,19 +73,29 @@ def git_commit() -> str:
 
 async def choose_backend(name: str, settings: Settings) -> Backend:
     embedder = get_embedding_provider()
+    reranker = CrossEncoderReranker(settings.reranker_model) if settings.rerank_enabled else None
     if name == "auto":
         name = "pg" if await database_reachable(settings.eval_database_url) else "memory"
         if name == "memory":
             print("PostgreSQL injoignable : recherche en mémoire (cosinus exact, sans pgvector).")
     if name == "pg":
-        return PgBackend(embedder, settings)
-    return MemoryBackend(embedder, settings)
+        return PgBackend(embedder, settings, reranker)
+    return MemoryBackend(embedder, settings, reranker)
 
 
 async def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
-    settings = get_settings()
+    overrides = {
+        "chunk_size_tokens": args.chunk_size,
+        "chunk_overlap_tokens": args.chunk_overlap,
+        "rerank_enabled": args.rerank,
+        "rerank_candidates": args.candidates,
+    }
+    # Command-line options override .env for this run only (to compare configurations).
+    settings = get_settings().model_copy(
+        update={key: value for key, value in overrides.items() if value is not None}
+    )
     k = args.k or settings.retrieval_top_k
     mode = args.mode or settings.retrieval_mode
     label = re.sub(r"[^\w-]+", "-", args.label).strip("-") or "run"
@@ -114,6 +133,8 @@ async def main(argv: list[str] | None = None) -> int:
         "chunk_size_tokens": settings.chunk_size_tokens,
         "chunk_overlap_tokens": settings.chunk_overlap_tokens,
         "chunks": chunks,
+        "reranker": settings.reranker_model if settings.rerank_enabled else None,
+        "rerank_candidates": settings.rerank_candidates if settings.rerank_enabled else None,
         "embedding_model": settings.embedding_model,
         "llm_model": settings.llm_model if llm else "non utilisé",
         "llm_effort": settings.llm_effort if llm else None,
