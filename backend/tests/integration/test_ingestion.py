@@ -2,41 +2,18 @@
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.core.db import get_session, get_session_factory
-from app.main import app
 from app.models import Chunk
-from app.services.embeddings import FakeEmbeddingProvider, get_embedding_provider
 from tests.pdf_factory import make_pdf
 
 pytestmark = pytest.mark.integration
 
 BODY = " ".join(f"Article {i} : les salariés ont droit à des congés payés." for i in range(1, 30))
-
-
-@pytest.fixture
-async def factory(migrated_db: str) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
-    engine = create_async_engine(migrated_db, poolclass=NullPool)
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE documents, conversations CASCADE"))
-
-    async def _get_session() -> AsyncIterator[AsyncSession]:
-        async with session_factory() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = _get_session
-    app.dependency_overrides[get_session_factory] = lambda: session_factory
-    app.dependency_overrides[get_embedding_provider] = FakeEmbeddingProvider
-    yield session_factory
-    await engine.dispose()
 
 
 async def wait_until_done(client: AsyncClient, document_id: str) -> dict:  # type: ignore[type-arg]

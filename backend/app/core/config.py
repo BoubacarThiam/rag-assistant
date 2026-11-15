@@ -44,6 +44,11 @@ class Settings(BaseSettings):
 
     # --- Retrieval / chat ---
     retrieval_top_k: int = Field(default=5, gt=0, le=50)
+    # Default search mode; Phase 7 picks the best one based on the evaluation.
+    retrieval_mode: Literal["vector", "fulltext", "hybrid"] = "vector"
+    # Hybrid search: candidates fetched from each method before fusion, and RRF constant.
+    hybrid_candidates: int = Field(default=20, gt=0, le=200)
+    rrf_k: int = Field(default=60, gt=0)
     chat_history_messages: int = Field(default=6, ge=0)
 
     @property

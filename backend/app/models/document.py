@@ -7,14 +7,17 @@ from enum import StrEnum
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -22,6 +25,9 @@ from app.models.base import Base, TimestampMixin
 # Dimension of the embedding vectors (intfloat/multilingual-e5-base -> 768).
 # Changing the embedding model to one with another dimension requires a migration.
 EMBEDDING_DIM = 768
+# Full-text configuration: French stemming and stop words ("le", "de", ...).
+FULLTEXT_CONFIG = "french"
+FULLTEXT_EXPRESSION = f"to_tsvector('{FULLTEXT_CONFIG}', content)"
 
 
 class DocumentStatus(StrEnum):
@@ -60,6 +66,16 @@ class Chunk(Base):
     __tablename__ = "chunks"
     __table_args__ = (
         UniqueConstraint("document_id", "position", name="uq_chunks_document_position"),
+        # HNSW: approximate nearest-neighbour index, fast cosine search on the vectors.
+        Index(
+            "ix_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+        # GIN: inverted index for full-text search (word -> chunks containing it).
+        Index("ix_chunks_content_tsv", "content_tsv", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -73,6 +89,11 @@ class Chunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+    # Computed by PostgreSQL: words reduced to their French stem ("congés" -> "cong").
+    # deferred: never loaded with the chunk, only used inside search queries.
+    content_tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR, Computed(FULLTEXT_EXPRESSION, persisted=True), deferred=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

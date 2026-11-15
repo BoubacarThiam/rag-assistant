@@ -29,3 +29,10 @@ def test_embedding_dimension_matches_migration() -> None:
 def test_deleting_a_document_cascades_to_chunks() -> None:
     (fk,) = Base.metadata.tables["chunks"].c.document_id.foreign_keys
     assert fk.ondelete == "CASCADE"
+
+
+def test_fulltext_expression_matches_migration() -> None:
+    from app.models.document import FULLTEXT_EXPRESSION
+
+    source = MIGRATION.with_name("0002_search_indexes.py").read_text(encoding="utf-8")
+    assert FULLTEXT_EXPRESSION in source

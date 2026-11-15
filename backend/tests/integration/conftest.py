@@ -12,10 +12,14 @@ import asyncpg
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
+from app.core.db import get_session, get_session_factory
+from app.main import app
+from app.services.embeddings import FakeEmbeddingProvider, get_embedding_provider
 
 BACKEND_DIR = Path(__file__).parents[2]
 
@@ -55,4 +59,23 @@ async def db_session(migrated_db: str) -> AsyncIterator[AsyncSession]:
     async with async_sessionmaker(engine, expire_on_commit=False)() as session:
         yield session
         await session.rollback()
+    await engine.dispose()
+
+
+@pytest.fixture
+async def factory(migrated_db: str) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """Empty test database + the API wired to it (and to fake embeddings)."""
+    engine = create_async_engine(migrated_db, poolclass=NullPool)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.execute(text("TRUNCATE documents, conversations CASCADE"))
+
+    async def _get_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = _get_session
+    app.dependency_overrides[get_session_factory] = lambda: session_factory
+    app.dependency_overrides[get_embedding_provider] = FakeEmbeddingProvider
+    yield session_factory
     await engine.dispose()
