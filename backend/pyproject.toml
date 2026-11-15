@@ -11,6 +11,10 @@ dependencies = [
     "alembic>=1.14",
     "pgvector>=0.3.6",
     "pydantic-settings>=2.6",
+    "python-multipart>=0.0.18",
+    "pymupdf>=1.25",
+    "sentence-transformers>=3.3",
+    "torch>=2.5",
 ]
 
 [dependency-groups]
@@ -25,12 +29,22 @@ dev = [
 [tool.uv]
 package = false
 
+# CPU-only PyTorch: the default Linux wheel bundles CUDA (several GB) that we do not need.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: needs a real PostgreSQL + pgvector database (skipped if unreachable)",
+    "model: loads the real embedding model (skipped unless RUN_MODEL_TESTS=1)",
 ]
 
 [tool.ruff]
@@ -51,5 +65,5 @@ plugins = ["pydantic.mypy"]
 files = ["app"]
 
 [[tool.mypy.overrides]]
-module = ["pgvector.*"]
+module = ["pgvector.*", "pymupdf.*", "fitz.*", "sentence_transformers.*"]
 ignore_missing_imports = true

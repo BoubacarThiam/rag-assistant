@@ -17,6 +17,9 @@ NAMING_CONVENTION = {
 
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+    # Fetch server-generated values (created_at, ...) with INSERT/UPDATE ... RETURNING:
+    # async sessions cannot lazy-load them afterwards.
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
 
 
 class TimestampMixin:

@@ -14,3 +14,8 @@ async def get_session() -> AsyncIterator[AsyncSession]:
     """FastAPI dependency: one session per request, closed automatically."""
     async with SessionLocal() as session:
         yield session
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """FastAPI dependency for background tasks, which outlive the request's session."""
+    return SessionLocal

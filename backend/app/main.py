@@ -9,11 +9,12 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import health
+from app.api import documents, health
 from app.core.config import get_settings
-from app.core.db import engine
+from app.core.db import SessionLocal, engine
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
+from app.services.ingestion.pipeline import recover_interrupted_documents
 
 logger = logging.getLogger("app")
 
@@ -23,6 +24,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings.log_level)
     logger.info("Starting %s v%s (env=%s)", settings.app_name, __version__, settings.environment)
+    try:
+        recovered = await recover_interrupted_documents(SessionLocal)
+        if recovered:
+            logger.warning("%d interrupted document(s) marked as error", recovered)
+    except Exception:  # the API must start even if the database is not ready yet
+        logger.exception("Could not check for interrupted documents")
     yield
     await engine.dispose()
     logger.info("Shutdown complete")
@@ -57,6 +64,7 @@ def create_app() -> FastAPI:
 
     register_error_handlers(app)
     app.include_router(health.router)
+    app.include_router(documents.router)
     return app
 
 

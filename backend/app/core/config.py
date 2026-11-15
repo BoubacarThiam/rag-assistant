@@ -32,9 +32,13 @@ class Settings(BaseSettings):
 
     # --- Embeddings ---
     embedding_model: str = "intfloat/multilingual-e5-base"
+    embedding_batch_size: int = Field(default=32, gt=0)
+    # "fake" = deterministic test provider, no model download (tests, quick demos).
+    embedding_provider: Literal["e5", "fake"] = "e5"
 
     # --- Ingestion ---
     max_upload_mb: int = Field(default=20, gt=0)
+    max_files_per_upload: int = Field(default=10, gt=0)
     chunk_size_tokens: int = Field(default=450, gt=0)
     chunk_overlap_tokens: int = Field(default=75, ge=0)
 
