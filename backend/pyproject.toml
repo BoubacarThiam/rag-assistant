@@ -16,6 +16,7 @@ dependencies = [
     "sentence-transformers>=3.3",
     "torch>=2.5",
     "anthropic>=1.0",
+    "openai>=1.60",
 ]
 
 [dependency-groups]

@@ -19,7 +19,7 @@ from typing import Any
 
 from app.core.config import Settings, get_settings
 from app.services.embeddings import get_embedding_provider
-from app.services.llm import AnthropicProvider, get_llm_provider
+from app.services.llm import AnthropicProvider, OpenAICompatibleProvider, get_llm_provider
 from app.services.retrieval.reranker import CrossEncoderReranker
 from eval import EVAL_DIR, PDF_DIR, REPORTS_DIR
 from eval.backends import Backend, MemoryBackend, PgBackend, database_reachable
@@ -151,7 +151,7 @@ async def main(argv: list[str] | None = None) -> int:
         "unanswerable": sum(not q.answerable for q in questions),
     }
     usage: dict[str, Any] = {}
-    if isinstance(llm, AnthropicProvider):
+    if isinstance(llm, AnthropicProvider | OpenAICompatibleProvider):
         usage |= {"llm_input_tokens": llm.input_tokens, "llm_output_tokens": llm.output_tokens}
     if judge:
         usage |= {

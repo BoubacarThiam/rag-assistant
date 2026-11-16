@@ -88,13 +88,24 @@ Ce que les expériences ont appris (détails dans [`docs/EXPERIMENTS.md`](docs/E
 
 ## Installation
 
-Prérequis : Docker et une clé API Anthropic.
+Prérequis : Docker et une clé API, Anthropic (Claude) ou d'un fournisseur gratuit (voir plus bas).
 
 ```bash
 git clone https://github.com/BoubacarThiam/rag-assistant.git
 cd rag-assistant
 cp .env.example .env          # puis renseigner ANTHROPIC_API_KEY
 docker compose up --build
+```
+
+**Avec un modèle gratuit.** Toute API au format OpenAI fonctionne (Groq, Gemini, Ollama en
+local…). Exemple avec l'offre gratuite de Groq, dans `.env` :
+
+```
+LLM_PROVIDER=openai_compatible
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_API_KEY=gsk_...
+LLM_MODEL=openai/gpt-oss-120b
+LLM_MAX_TOKENS=4096
 ```
 
 - Interface : http://localhost:5173
@@ -142,7 +153,7 @@ cd frontend && npm test                 # frontend : Vitest + Testing Library
 | **PostgreSQL + pgvector** plutôt qu'une base vectorielle dédiée | Une seule base pour les documents, les conversations, les vecteurs et la recherche plein texte ; transactions et suppressions en cascade gratuites. |
 | **multilingual-e5-base** en local | Bon en français, gratuit, sans envoyer les documents à un tiers pour l'indexation. Préfixes `query:` / `passage:` obligatoires pour ce modèle. |
 | **Taille mesurée en tokens** du modèle d'embedding | Le modèle tronque au-delà de 512 tokens : compter en caractères laisserait passer des passages coupés sans le savoir. |
-| **Interfaces `EmbeddingProvider` / `LLMProvider`** | Les services ne dépendent pas d'un fournisseur ; les tests utilisent des versions factices, et changer de modèle ne touche qu'un fichier. |
+| **Interfaces `EmbeddingProvider` / `LLMProvider`** | Les services ne dépendent pas d'un fournisseur ; les tests utilisent des versions factices. Ajouter un second fournisseur (API au format OpenAI : Groq, Gemini, Ollama) n'a demandé qu'un fichier, sans toucher au reste. |
 | **SSE** plutôt que WebSocket | Le flux ne va que du serveur au client ; SSE passe par HTTP standard et se relaie facilement par nginx. |
 | **Évaluation avant optimisation** | Sans mesure, l'intuition « des passages plus petits seront plus précis » aurait été adoptée — elle était fausse. |
 

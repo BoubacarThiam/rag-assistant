@@ -17,7 +17,7 @@ Pipeline : PDF → extraction page par page → nettoyage → découpage en pass
 | Base de données | PostgreSQL 16 + pgvector (image `pgvector/pgvector:pg16`), index HNSW cosinus, FTS `french` |
 | Extraction PDF | PyMuPDF (`pymupdf`) |
 | Embeddings | `intfloat/multilingual-e5-base` (768 dim) via sentence-transformers, derrière l'interface `EmbeddingProvider` |
-| LLM | API Claude via le SDK officiel `anthropic` (AsyncAnthropic), modèle dans `.env` (`LLM_MODEL`, défaut `claude-opus-5-5`), derrière l'interface `LLMProvider` |
+| LLM | API Claude via le SDK officiel `anthropic` (AsyncAnthropic), modèle dans `.env` (`LLM_MODEL`, défaut `claude-opus-5-5`), derrière l'interface `LLMProvider`. Alternative gratuite : `LLM_PROVIDER=openai_compatible` (SDK `openai`, Groq/Gemini/Ollama), `openai_compatible_provider.py` |
 | Frontend | React + Vite + TypeScript + Tailwind CSS (v4) |
 | Tests | pytest + pytest-asyncio + httpx (backend), Vitest + Testing Library (frontend) |
 | Lancement | `docker compose up` (services : `db`, `api`, `web`) |

@@ -27,7 +27,12 @@ class Settings(BaseSettings):
     # Separate database filled by `python -m eval.run` (created automatically).
     eval_database_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag_eval"
 
-    # --- LLM (Claude) ---
+    # --- LLM ---
+    # "anthropic" = Claude (default) | "openai_compatible" = any API with the OpenAI chat format
+    # (Groq, Gemini, Ollama...), configured with llm_base_url / llm_api_key / llm_model.
+    llm_provider: Literal["anthropic", "openai_compatible"] = "anthropic"
+    llm_base_url: str = "https://api.groq.com/openai/v1"
+    llm_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None
     llm_model: str = "claude-opus-5-5"
     judge_model: str = "claude-opus-5-5"
