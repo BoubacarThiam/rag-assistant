@@ -2,6 +2,9 @@
 
 [![CI](https://github.com/BoubacarThiam/rag-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/BoubacarThiam/rag-assistant/actions/workflows/ci.yml)
 
+**Démo : https://boubacarthiam.github.io/rag-assistant/** (protégée par mot de passe, sur demande ;
+en ligne quand l'ordinateur qui l'héberge est allumé).
+
 Une application de chat qui répond aux questions **uniquement à partir des PDF que vous importez**,
 et qui **cite ses sources** : chaque affirmation renvoie à un document, une page et un extrait.
 Si l'information n'est pas dans les documents, l'assistant le dit au lieu d'inventer.
@@ -145,7 +148,10 @@ docker compose -f docker-compose.demo.yml logs tunnel | grep trycloudflare   # a
 docker compose -f docker-compose.demo.yml down                              # arrêter
 ```
 
-L'adresse change à chaque démarrage et la démo n'est en ligne que quand l'ordinateur est allumé.
+L'adresse du tunnel change à chaque démarrage. Une page de redirection publiée avec GitHub Pages
+(branche `gh-pages`) donne une adresse fixe, **https://boubacarthiam.github.io/rag-assistant/** ;
+après chaque démarrage, `python deploy/demo_link.py` la fait pointer vers le nouveau tunnel.
+La démo n'est en ligne que quand l'ordinateur est allumé.
 La même image se déploie sur Google Cloud Run ou Hugging Face Spaces
 ([`deploy/cloudrun`](deploy/cloudrun/deploy.py), [`deploy/huggingface`](deploy/huggingface/deploy.py)).
 
