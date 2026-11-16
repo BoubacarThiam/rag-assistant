@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint, types, tests with PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: rag
+          POSTGRES_PASSWORD: rag
+          POSTGRES_DB: rag
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rag"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://rag:rag@localhost:5432/rag
+      TEST_DATABASE_URL: postgresql+asyncpg://rag:rag@localhost:5432/rag_test
+      REQUIRE_DB: "1" # integration tests fail instead of being skipped
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Create the test database
+        run: PGPASSWORD=rag psql -h localhost -U rag -d rag -c "CREATE DATABASE rag_test"
+      - run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check . ../eval && uv run ruff format --check . ../eval
+      - name: Type check
+        run: uv run mypy
+      - name: Tests
+        run: uv run pytest -rs
+
+  frontend:
+    name: Frontend (types, tests, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx vite build
+
+  docker:
+    name: Docker Compose (build and health)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start the stack
+        run: docker compose up --build --detach --wait --wait-timeout 300
+      - name: API health (database and pgvector)
+        run: |
+          curl --fail --silent http://localhost:8000/health | tee health.json
+          grep -q '"database":"ok"' health.json
+      - name: Frontend proxy to the API
+        run: |
+          curl --fail --silent http://localhost:5173/ | grep -q '<div id="root">'
+          curl --fail --silent http://localhost:5173/api/documents | tee documents.json
+          grep -q '^\[\]$' documents.json
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+  docker-prod:
+    name: Docker Compose production (nginx + static build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Production .env
+        run: |
+          cp .env.example .env
+          echo "POSTGRES_PASSWORD=ci-$(openssl rand -hex 8)" >> .env
+          echo "WEB_PORT=8080" >> .env
+      - name: Build and start the stack
+        run: docker compose -f docker-compose.prod.yml --env-file .env up --build --detach --wait --wait-timeout 300
+      - name: Site and API through nginx
+        run: |
+          curl --fail --silent http://localhost:8080/ | grep -q '<div id="root">'
+          curl --fail --silent http://localhost:8080/api/health | grep -q '"database":"ok"'
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml logs --no-color

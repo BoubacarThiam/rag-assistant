@@ -64,7 +64,8 @@ class Settings(BaseSettings):
     hybrid_candidates: int = Field(default=20, gt=0, le=200)
     rrf_k: int = Field(default=60, gt=0)
     # Reranking: a cross-encoder re-orders the first `rerank_candidates` results.
-    # Off by default: small measured gain for several seconds per query on CPU (docs/EXPERIMENTS.md).
+    # Off by default: small measured gain for several seconds per query on CPU
+    # (see docs/EXPERIMENTS.md).
     rerank_enabled: bool = False
     reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     rerank_candidates: int = Field(default=20, gt=0, le=200)
