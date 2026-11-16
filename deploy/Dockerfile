@@ -1,5 +1,5 @@
-# Hugging Face Spaces image: one container serving the API (under /api) and the React build,
-# on port 7860. Built from the folder assembled by deploy.py (backend/ and frontend/ inside).
+# Single-container image (Hugging Face Spaces, Google Cloud Run): the API (under /api) and the
+# React build on port 7860. Built from the folder assembled by deploy/common.py.
 
 FROM node:22-alpine AS frontend
 WORKDIR /frontend
