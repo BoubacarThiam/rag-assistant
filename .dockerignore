@@ -1,0 +1,14 @@
+# Build context = repository root (docker-compose.demo.yml, deploy/Dockerfile).
+# The dev images use backend/ and frontend/ as context, with their own .dockerignore.
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+.env
+.env.*
+.git
+docs
+eval

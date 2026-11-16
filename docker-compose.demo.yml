@@ -1,0 +1,37 @@
+# Public demo from your own computer: docker compose -f docker-compose.demo.yml up -d --build
+# Then read the public address: docker compose -f docker-compose.demo.yml logs tunnel
+#
+# - app: the single-container image (API + frontend, same as the cloud deployments), using
+#   the hosted database DEPLOY_DATABASE_URL and asking visitors for DEMO_PASSWORD (.env).
+# - tunnel: a free Cloudflare "quick tunnel" giving it an https://….trycloudflare.com address,
+#   without opening any port on your router. The address changes at every start, and the
+#   demo is only online while this computer is on.
+name: rag-assistant-demo
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    env_file: .env
+    environment:
+      ENVIRONMENT: prod
+      DATABASE_URL: ${DEPLOY_DATABASE_URL:?set DEPLOY_DATABASE_URL in .env}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?set DEMO_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:7860:7860" # also reachable locally, at http://localhost:7860
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7860/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:2025.8.1
+    command: tunnel --no-autoupdate --url http://app:7860
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped

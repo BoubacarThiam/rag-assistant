@@ -132,6 +132,23 @@ Différences avec le mode développement : le frontend est un build statique ser
 (port 80, qui relaie `/api` vers le backend sans mise en tampon pour le streaming), pas de code
 monté ni de rechargement automatique, base non exposée hors de Docker, redémarrage automatique.
 
+### Démo publique depuis son ordinateur
+
+Une image unique (API + interface, [`deploy/Dockerfile`](deploy/Dockerfile)) utilise une base
+PostgreSQL hébergée (par exemple Neon, gratuite) et un tunnel Cloudflare qui donne une adresse
+publique en HTTPS, sans ouvrir de port. Les visiteurs doivent saisir un mot de passe.
+
+```bash
+# dans .env : DEPLOY_DATABASE_URL=postgresql://... et DEMO_PASSWORD=...
+docker compose -f docker-compose.demo.yml up -d --build
+docker compose -f docker-compose.demo.yml logs tunnel | grep trycloudflare   # adresse publique
+docker compose -f docker-compose.demo.yml down                              # arrêter
+```
+
+L'adresse change à chaque démarrage et la démo n'est en ligne que quand l'ordinateur est allumé.
+La même image se déploie sur Google Cloud Run ou Hugging Face Spaces
+([`deploy/cloudrun`](deploy/cloudrun/deploy.py), [`deploy/huggingface`](deploy/huggingface/deploy.py)).
+
 ## Tests et qualité
 
 ```bash
