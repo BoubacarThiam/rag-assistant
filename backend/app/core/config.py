@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -75,6 +75,36 @@ class Settings(BaseSettings):
     reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     rerank_candidates: int = Field(default=20, gt=0, le=200)
     chat_history_messages: int = Field(default=6, ge=0)
+
+    # --- Single-container deployment (e.g. Hugging Face Spaces) ---
+    # "/api" when this app also serves the frontend; empty = API at the root (docker compose).
+    api_prefix: str = ""
+    # Folder holding the frontend build (index.html); empty = API only.
+    static_dir: str = ""
+    # When set, every request except the health check needs this password (HTTP basic auth).
+    demo_password: SecretStr | None = None
+
+    @field_validator("database_url", "test_database_url", "eval_database_url")
+    @classmethod
+    def use_asyncpg_url(cls, url: str) -> str:
+        """Accept the URL a hosting service gives (e.g. Neon) and adapt it to asyncpg.
+
+        `postgresql://...?sslmode=require&channel_binding=require` becomes
+        `postgresql+asyncpg://...?ssl=require`: asyncpg has its own name for the SSL option
+        and does not know `channel_binding`.
+        """
+        if url.startswith(("postgresql://", "postgres://")):
+            url = "postgresql+asyncpg://" + url.split("://", 1)[1]
+        base, _, query = url.partition("?")
+        if not query:
+            return url
+        params = []
+        for param in query.split("&"):
+            key, _, value = param.partition("=")
+            if key == "channel_binding":
+                continue
+            params.append(f"ssl={value}" if key == "sslmode" else param)
+        return f"{base}?{'&'.join(params)}" if params else base
 
     @property
     def cors_origin_list(self) -> list[str]:
