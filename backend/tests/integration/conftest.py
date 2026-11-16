@@ -5,6 +5,7 @@ instead of failing.
 """
 
 import asyncio
+import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -43,7 +44,11 @@ async def _can_connect(url: str) -> bool:
 def migrated_db() -> str:
     url = _test_db_url()
     if not asyncio.run(_can_connect(url)):
-        pytest.skip(f"Test database unreachable ({url.split('@')[-1]}): start it with Docker")
+        message = f"Test database unreachable ({url.split('@')[-1]}): start it with Docker"
+        # In CI the database must be there: a silent skip would hide broken tests.
+        if os.getenv("REQUIRE_DB") == "1":
+            pytest.fail(message)
+        pytest.skip(message)
 
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     config.attributes["configure_logger"] = False
