@@ -156,6 +156,16 @@ L'adresse du tunnel change à chaque démarrage. Une page de redirection publié
 (branche `gh-pages`) donne une adresse fixe, **https://boubacarthiam.github.io/rag-assistant/** ;
 après chaque démarrage, `python deploy/demo_link.py` la fait pointer vers le nouveau tunnel.
 La démo n'est en ligne que quand l'ordinateur est allumé.
+
+**Surveillance automatique** ([`deploy/watchdog.py`](deploy/watchdog.py)) : toutes les minutes,
+elle relance Docker et les conteneurs s'ils sont arrêtés, teste l'adresse publique comme un
+visiteur, recrée le tunnel après trois échecs et met le lien court à jour. Installée comme tâche
+Windows lancée à l'ouverture de session (journal : `demo-watchdog.log`) :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy/install-watchdog.ps1              # installer
+powershell -ExecutionPolicy Bypass -File deploy/install-watchdog.ps1 -Uninstall   # retirer
+```
 La même image se déploie sur Google Cloud Run ou Hugging Face Spaces
 ([`deploy/cloudrun`](deploy/cloudrun/deploy.py), [`deploy/huggingface`](deploy/huggingface/deploy.py)).
 
