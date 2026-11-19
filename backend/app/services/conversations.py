@@ -20,6 +20,7 @@ class StoredMessage:
     content: str
     sources: list[dict[str, Any]] | None
     created_at: datetime
+    mode: str | None = None  # answer mode of an assistant message
 
 
 class ConversationStore(Protocol):
@@ -40,6 +41,7 @@ class ConversationStore(Protocol):
         answer: str,
         sources: list[dict[str, Any]],
         asked_at: datetime,
+        mode: str = "documents",
     ) -> uuid.UUID:
         """Store the user question and the assistant answer; returns the answer's id."""
         ...
@@ -80,7 +82,8 @@ class SqlConversationStore:
         async with self._session_factory() as session:
             rows = list(await session.scalars(stmt))
         return [
-            StoredMessage(m.id, m.role, m.content, m.sources, m.created_at) for m in reversed(rows)
+            StoredMessage(m.id, m.role, m.content, m.sources, m.created_at, m.mode)
+            for m in reversed(rows)
         ]
 
     async def save_exchange(
@@ -90,6 +93,7 @@ class SqlConversationStore:
         answer: str,
         sources: list[dict[str, Any]],
         asked_at: datetime,
+        mode: str = "documents",
     ) -> uuid.UUID:
         async with self._session_factory() as session:
             conversation = await session.get(Conversation, conversation_id)
@@ -104,6 +108,7 @@ class SqlConversationStore:
                 role=MessageRole.ASSISTANT.value,
                 content=answer,
                 sources=sources,
+                mode=mode,
                 created_at=datetime.now(UTC),
             )
             session.add_all(
@@ -148,10 +153,11 @@ class InMemoryConversationStore:
         answer: str,
         sources: list[dict[str, Any]],
         asked_at: datetime,
+        mode: str = "documents",
     ) -> uuid.UUID:
         answer_id = uuid.uuid4()
         self.conversations[conversation_id] += [
             StoredMessage(uuid.uuid4(), "user", question, None, asked_at),
-            StoredMessage(answer_id, "assistant", answer, sources, datetime.now(UTC)),
+            StoredMessage(answer_id, "assistant", answer, sources, datetime.now(UTC), mode),
         ]
         return answer_id

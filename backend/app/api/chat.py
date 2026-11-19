@@ -46,6 +46,7 @@ async def chat(
             conversation_id=request.conversation_id,
             document_ids=request.document_ids,
             history_messages=settings.chat_history_messages,
+            mode=request.mode,
         ):
             yield format_sse(event)
 

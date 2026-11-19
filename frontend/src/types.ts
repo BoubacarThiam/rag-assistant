@@ -2,6 +2,10 @@
 
 export type DocumentStatus = "processing" | "ready" | "error";
 
+// "documents": answers only from the user's PDFs (cited), refusal otherwise.
+// "general": the PDFs first when relevant, the model's general knowledge otherwise.
+export type ChatMode = "documents" | "general";
+
 export interface DocumentInfo {
   id: string;
   filename: string;
@@ -29,6 +33,7 @@ export interface StoredMessage {
   role: "user" | "assistant";
   content: string;
   sources: Source[] | null;
+  mode?: ChatMode | null; // absent or null: user message, or answer stored before modes existed
   created_at: string;
 }
 
@@ -45,6 +50,7 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   sources: Source[];
+  mode?: ChatMode; // assistant messages only
   status: "streaming" | "done" | "error";
   error?: string;
 }

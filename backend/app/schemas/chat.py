@@ -15,6 +15,11 @@ class ChatRequest(BaseModel):
     document_ids: list[uuid.UUID] | None = Field(
         default=None, description="Limiter la recherche à ces documents"
     )
+    mode: Literal["documents", "general"] = Field(
+        default="documents",
+        description="documents : uniquement les documents, avec sources ; "
+        "general : les documents d'abord, sinon les connaissances générales du modèle",
+    )
 
 
 class MessageOut(BaseModel):
@@ -24,4 +29,5 @@ class MessageOut(BaseModel):
     role: Literal["user", "assistant"]
     content: str
     sources: list[dict[str, Any]] | None
+    mode: Literal["documents", "general"] | None = None
     created_at: datetime

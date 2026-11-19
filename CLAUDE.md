@@ -2,7 +2,10 @@
 
 ## Le projet
 Application de chat qui répond aux questions **uniquement à partir des PDF importés par l'utilisateur**,
-en citant ses sources ([1], [2]…) avec document + page + extrait. Projet portfolio : l'objectif est de
+en citant ses sources ([1], [2]…) avec document + page + extrait. C'est le mode par défaut
+(`mode="documents"`) ; un second mode choisi par l'utilisateur (`mode="general"`, prompt
+`GENERAL_SYSTEM_PROMPT`) autorise les connaissances générales du modèle quand les PDF ne répondent
+pas, en signalant les réponses sans source. Projet portfolio : l'objectif est de
 montrer un pipeline RAG complet, **évalué et testé**, pas un simple appel d'API.
 
 Pipeline : PDF → extraction page par page → nettoyage → découpage en passages (chunks) → embeddings

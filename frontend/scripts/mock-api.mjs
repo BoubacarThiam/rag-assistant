@@ -70,6 +70,10 @@ const ANSWER =
   "- **Report** : au maximum 5 jours peuvent être reportés, à utiliser avant le 31 mars [1].\n" +
   "- **Télétravail** : jusqu'à trois jours par semaine après la période d'essai, avec une indemnité de 30 euros par mois [2].";
 const REFUSAL = "Je ne trouve pas cette information dans tes documents.";
+// "General knowledge" mode, for a question outside the documents (no citation).
+const GENERAL_ANSWER =
+  "Vos documents n'en parlent pas, mais voici une réponse générale : Paris est la capitale " +
+  "de la France. C'est aussi sa plus grande ville, avec environ 2 millions d'habitants.";
 
 const conversations = new Map();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -86,11 +90,13 @@ async function readBody(req) {
 }
 
 async function chat(req, res) {
-  const { message, conversation_id } = JSON.parse((await readBody(req)).toString("utf8"));
+  const { message, conversation_id, mode = "documents" } = JSON.parse(
+    (await readBody(req)).toString("utf8"),
+  );
   const id = conversation_id ?? randomUUID();
   if (!conversations.has(id)) conversations.set(id, []);
   const unknown = /salaire|météo|capitale/i.test(message);
-  const answer = unknown ? REFUSAL : ANSWER;
+  const answer = unknown ? (mode === "general" ? GENERAL_ANSWER : REFUSAL) : ANSWER;
   const sources = unknown ? [] : SOURCES;
 
   res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
@@ -104,7 +110,7 @@ async function chat(req, res) {
   const messageId = randomUUID();
   conversations.get(id).push(
     { id: randomUUID(), role: "user", content: message, sources: null, created_at: now() },
-    { id: messageId, role: "assistant", content: answer, sources, created_at: now() },
+    { id: messageId, role: "assistant", content: answer, sources, mode, created_at: now() },
   );
   emit("sources", { sources });
   emit("done", { message_id: messageId });

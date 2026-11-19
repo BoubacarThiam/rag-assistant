@@ -1,6 +1,12 @@
 """Shared fixtures for the whole test suite."""
 
+import os
 from collections.abc import AsyncIterator
+
+# Before importing the app: a developer's .env may hold deployment settings (demo password,
+# single-container mode) that must not apply to the tests. Environment variables take
+# precedence over .env.
+os.environ.update(DEMO_PASSWORD="", API_PREFIX="", STATIC_DIR="")
 
 import pytest
 from httpx import ASGITransport, AsyncClient

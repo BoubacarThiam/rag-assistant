@@ -1,4 +1,4 @@
-import type { ChatEvent, DocumentInfo, StoredMessage } from "../types";
+import type { ChatEvent, ChatMode, DocumentInfo, StoredMessage } from "../types";
 import { createSseParser } from "./sse";
 
 const BASE_URL: string = import.meta.env.VITE_API_URL ?? "/api";
@@ -65,6 +65,7 @@ export interface ChatRequest {
   message: string;
   conversation_id?: string;
   document_ids?: string[];
+  mode?: ChatMode;
 }
 
 /** POST /chat and call `onEvent` for each Server-Sent Event until the stream ends. */

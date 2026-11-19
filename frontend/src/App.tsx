@@ -133,7 +133,9 @@ export default function App() {
           messages={chat.messages}
           isStreaming={chat.isStreaming}
           hasReadyDocuments={readyIds.size > 0}
-          onSend={(question) => void chat.send(question, documentFilter)}
+          mode={chat.mode}
+          onModeChange={chat.setMode}
+          onSend={(question) => void chat.send(question, documentFilter, chat.mode)}
           onStop={chat.stop}
           onOpenSources={openSources}
         />

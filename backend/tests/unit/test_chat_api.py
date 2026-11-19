@@ -94,3 +94,21 @@ async def test_invalid_requests_are_rejected(
 ) -> None:
     assert (await client.post("/chat", json=payload)).status_code == 422
     assert store.conversations == {}
+
+
+async def test_mode_is_forwarded_and_returned_in_the_history(
+    client: AsyncClient, store: InMemoryConversationStore
+) -> None:
+    events = parse_sse((await client.post("/chat", json={"message": "Q", "mode": "general"})).text)
+    conversation_id = events[0][1]["conversation_id"]
+
+    messages = (await client.get(f"/conversations/{conversation_id}/messages")).json()
+
+    assert [m["mode"] for m in messages] == [None, "general"]
+
+
+async def test_unknown_mode_is_rejected(
+    client: AsyncClient, store: InMemoryConversationStore
+) -> None:
+    response = await client.post("/chat", json={"message": "Q", "mode": "web"})
+    assert response.status_code == 422

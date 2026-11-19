@@ -26,7 +26,11 @@ L'objectif du projet n'est pas d'appeler une API, mais de construire un pipeline
 
 - Import de PDF par glisser-déposer, traitement en tâche de fond avec statut (`processing` → `ready`).
 - Réponses en streaming (Server-Sent Events), citations `[1]`, `[2]` cliquables qui ouvrent l'extrait.
-- Refus explicite quand la réponse n'est pas dans les documents.
+- Deux modes au choix dans l'interface :
+  - **Mes documents** (par défaut) : réponses uniquement à partir des PDF, avec sources, et refus
+    explicite quand la réponse n'y est pas ;
+  - **Connaissances générales** : les PDF d'abord (cités) quand ils répondent, sinon les
+    connaissances du modèle. Une réponse sans source est signalée « hors de vos documents ».
 - Conversations avec historique ; recherche vectorielle, plein texte ou hybride ; reranking optionnel.
 - Thème clair/sombre, interface utilisable sur mobile.
 

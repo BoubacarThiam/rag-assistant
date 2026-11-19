@@ -35,6 +35,7 @@ class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
         CheckConstraint("role IN ('user', 'assistant')", name="role"),
+        CheckConstraint("mode IS NULL OR mode IN ('documents', 'general')", name="mode"),
         Index("ix_messages_conversation_created", "conversation_id", "created_at"),
     )
 
@@ -46,6 +47,8 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     # Sources cited by an assistant answer: [{"index": 1, "document": ..., "page": ...}, ...]
     sources: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    # Answer mode of an assistant message ("documents" or "general"); None for user messages.
+    mode: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

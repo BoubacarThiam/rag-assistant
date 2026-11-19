@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, getMessages, streamChat } from "../lib/api";
-import type { ChatEvent, ChatMessage } from "../types";
+import type { ChatEvent, ChatMessage, ChatMode } from "../types";
 
 const STORAGE_KEY = "conversation_id";
+const MODE_KEY = "chat_mode";
 const GENERIC_ERROR = "Une erreur inattendue est survenue. Réessayez.";
 
 let localId = 0;
@@ -25,8 +26,17 @@ function storeConversation(id: string | null) {
   }
 }
 
+function readStoredMode(): ChatMode {
+  try {
+    return localStorage.getItem(MODE_KEY) === "general" ? "general" : "documents";
+  } catch {
+    return "documents";
+  }
+}
+
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [mode, setModeState] = useState<ChatMode>(readStoredMode);
   const [isStreaming, setIsStreaming] = useState(false);
   const conversationId = useRef<string | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -46,6 +56,7 @@ export function useChat() {
             role: m.role,
             content: m.content,
             sources: m.sources ?? [],
+            ...(m.role === "assistant" && { mode: m.mode ?? "documents" }),
             status: "done",
           })),
         );
@@ -56,7 +67,16 @@ export function useChat() {
     };
   }, []);
 
-  const send = useCallback(async (question: string, documentIds: string[]) => {
+  const setMode = useCallback((next: ChatMode) => {
+    setModeState(next);
+    try {
+      localStorage.setItem(MODE_KEY, next);
+    } catch {
+      // ignore: the choice just won't survive a reload
+    }
+  }, []);
+
+  const send = useCallback(async (question: string, documentIds: string[], mode: ChatMode) => {
     const text = question.trim();
     if (!text || abort.current) return;
 
@@ -67,7 +87,7 @@ export function useChat() {
     setMessages((current) => [
       ...current,
       { id: nextId(), role: "user", content: text, sources: [], status: "done" },
-      { id: answerId, role: "assistant", content: "", sources: [], status: "streaming" },
+      { id: answerId, role: "assistant", content: "", sources: [], mode, status: "streaming" },
     ]);
     setIsStreaming(true);
     const controller = new AbortController();
@@ -100,6 +120,7 @@ export function useChat() {
           message: text,
           conversation_id: conversationId.current ?? undefined,
           document_ids: documentIds.length > 0 ? documentIds : undefined,
+          mode,
         },
         onEvent,
         controller.signal,
@@ -135,5 +156,5 @@ export function useChat() {
     setMessages([]);
   }, []);
 
-  return { messages, isStreaming, send, stop, reset };
+  return { messages, isStreaming, mode, setMode, send, stop, reset };
 }

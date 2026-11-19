@@ -14,11 +14,12 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from app.services.conversations import ConversationStore, StoredMessage
 from app.services.llm.base import ChatMessage, LLMError, LLMProvider
 from app.services.llm.prompts import (
+    GENERAL_SYSTEM_PROMPT,
     REFUSAL_SENTENCE,
     SYSTEM_PROMPT,
     build_user_message,
@@ -33,6 +34,10 @@ logger = logging.getLogger(__name__)
 Retriever = Callable[[str, Sequence[uuid.UUID] | None], Awaitable[list[SearchHit]]]
 
 UNEXPECTED_ERROR = "Une erreur inattendue est survenue. Réessayez."
+
+# "documents": answers only from the user's documents, with citations, refusal otherwise.
+# "general": documents first (cited) when relevant, general knowledge otherwise.
+ChatMode = Literal["documents", "general"]
 
 
 @dataclass(frozen=True)
@@ -81,6 +86,7 @@ async def chat_stream(
     conversation_id: uuid.UUID | None,
     document_ids: Sequence[uuid.UUID] | None,
     history_messages: int,
+    mode: ChatMode = "documents",
 ) -> AsyncIterator[ChatEvent]:
     asked_at = datetime.now(UTC)
     try:
@@ -90,7 +96,7 @@ async def chat_stream(
 
         hits = await retrieve(question, document_ids)
         parts: list[str] = []
-        if not hits:
+        if not hits and mode == "documents":
             # Nothing to ground an answer on (no document imported yet): no need to call the LLM.
             parts.append(REFUSAL_SENTENCE)
             yield ChatEvent("token", {"text": REFUSAL_SENTENCE})
@@ -98,16 +104,20 @@ async def chat_stream(
             stored = await store.messages(conversation_id, limit=history_messages or None)
             history = build_history(stored) if history_messages else []
             messages = [*history, ChatMessage("user", build_user_message(question, hits))]
-            async for text in llm.stream(SYSTEM_PROMPT, messages):
+            system = GENERAL_SYSTEM_PROMPT if mode == "general" else SYSTEM_PROMPT
+            async for text in llm.stream(system, messages):
                 parts.append(text)
                 yield ChatEvent("token", {"text": text})
 
         answer = "".join(parts)
         sources = build_sources(answer, hits)
-        message_id = await store.save_exchange(conversation_id, question, answer, sources, asked_at)
+        message_id = await store.save_exchange(
+            conversation_id, question, answer, sources, asked_at, mode
+        )
         logger.info(
-            "Chat answered: conversation=%s passages=%d cited=%d chars=%d",
+            "Chat answered: conversation=%s mode=%s passages=%d cited=%d chars=%d",
             conversation_id,
+            mode,
             len(hits),
             len(sources),
             len(answer),

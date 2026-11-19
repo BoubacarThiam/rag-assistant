@@ -1,13 +1,15 @@
-import { AlertCircle, ArrowUp, BookOpen, FileSearch, Square } from "lucide-react";
+import { AlertCircle, ArrowUp, BookOpen, FileSearch, FileText, Globe, Square } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { pluralize } from "../lib/format";
-import type { ChatMessage } from "../types";
+import type { ChatMessage, ChatMode } from "../types";
 import { AnswerText } from "./AnswerText";
 
 interface Props {
   messages: ChatMessage[];
   isStreaming: boolean;
   hasReadyDocuments: boolean;
+  mode: ChatMode;
+  onModeChange: (mode: ChatMode) => void;
   onSend: (question: string) => void;
   onStop: () => void;
   onOpenSources: (messageId: string, index: number | null) => void;
@@ -50,9 +52,18 @@ function MessageBubble({
   }
 
   const waiting = message.status === "streaming" && message.content === "";
+  // In general mode, an answer that cites nothing comes from the model's own knowledge.
+  const outsideDocuments =
+    message.mode === "general" && message.status === "done" && message.sources.length === 0;
   return (
     <div className="animate-in flex justify-start">
       <div className="max-w-[92%] rounded-2xl rounded-bl-md border border-border bg-surface px-4 py-3 md:max-w-[85%]">
+        {outsideDocuments && (
+          <p className="mb-2 inline-flex items-center gap-1.5 rounded-md bg-surface-2 px-2 py-1 text-xs font-medium text-muted">
+            <Globe className="size-3.5" aria-hidden />
+            Réponse hors de vos documents, sans source
+          </p>
+        )}
         {waiting ? (
           <ThinkingIndicator />
         ) : (
@@ -88,11 +99,53 @@ function MessageBubble({
   );
 }
 
+const MODES: { value: ChatMode; label: string; Icon: typeof Globe }[] = [
+  { value: "documents", label: "Mes documents", Icon: FileText },
+  { value: "general", label: "Connaissances générales", Icon: Globe },
+];
+
+/** Where answers may come from: a two-option radio group styled as a segmented control. */
+function ModeSwitch({ mode, onChange }: { mode: ChatMode; onChange: (mode: ChatMode) => void }) {
+  return (
+    <fieldset className="mx-auto mb-2 flex max-w-3xl flex-wrap items-center gap-x-3 gap-y-1">
+      <legend className="sr-only">Source des réponses</legend>
+      <span aria-hidden className="text-xs text-muted">
+        Répondre à partir de :
+      </span>
+      <div className="inline-flex rounded-lg border border-border bg-surface p-0.5">
+        {MODES.map(({ value, label, Icon }) => (
+          <label
+            key={value}
+            className={`flex min-h-9 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary ${
+              mode === value
+                ? "bg-primary-soft text-on-primary-soft"
+                : "text-muted hover:text-text"
+            }`}
+          >
+            <input
+              type="radio"
+              name="chat-mode"
+              value={value}
+              checked={mode === value}
+              onChange={() => onChange(value)}
+              className="sr-only"
+            />
+            <Icon className="size-3.5" aria-hidden />
+            {label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 function EmptyState({
   hasReadyDocuments,
+  mode,
   onPick,
 }: {
   hasReadyDocuments: boolean;
+  mode: ChatMode;
   onPick: (question: string) => void;
 }) {
   return (
@@ -100,11 +153,15 @@ function EmptyState({
       <span className="flex size-14 items-center justify-center rounded-2xl bg-primary-soft text-on-primary-soft">
         <FileSearch className="size-7" aria-hidden />
       </span>
-      <h1 className="text-xl font-semibold">Interrogez vos documents</h1>
+      <h1 className="text-xl font-semibold">
+        {mode === "general" ? "Posez n'importe quelle question" : "Interrogez vos documents"}
+      </h1>
       <p className="text-sm text-muted">
-        {hasReadyDocuments
-          ? "Posez une question : la réponse s'appuie uniquement sur vos PDF, avec les sources citées."
-          : "Importez un PDF dans la barre latérale, puis posez vos questions. Chaque réponse cite ses sources."}
+        {mode === "general"
+          ? "Si vos PDF contiennent la réponse, elle est citée. Sinon, l'assistant répond avec ses connaissances générales et le signale."
+          : hasReadyDocuments
+            ? "Posez une question : la réponse s'appuie uniquement sur vos PDF, avec les sources citées."
+            : "Importez un PDF dans la barre latérale, puis posez vos questions. Chaque réponse cite ses sources."}
       </p>
       {hasReadyDocuments && (
         <ul className="flex w-full flex-col gap-2">
@@ -129,6 +186,8 @@ export function Chat({
   messages,
   isStreaming,
   hasReadyDocuments,
+  mode,
+  onModeChange,
   onSend,
   onStop,
   onOpenSources,
@@ -169,7 +228,7 @@ export function Chat({
         className="min-h-0 flex-1 overflow-y-auto"
       >
         {messages.length === 0 ? (
-          <EmptyState hasReadyDocuments={hasReadyDocuments} onPick={onSend} />
+          <EmptyState hasReadyDocuments={hasReadyDocuments} mode={mode} onPick={onSend} />
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6" aria-live="polite">
             {messages.map((message) => (
@@ -180,6 +239,7 @@ export function Chat({
       </div>
 
       <form onSubmit={submit} className="border-t border-border bg-bg px-4 py-3">
+        <ModeSwitch mode={mode} onChange={onModeChange} />
         <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-border bg-surface p-2 transition-colors duration-150 focus-within:border-primary">
           <label htmlFor="question" className="sr-only">
             Votre question
@@ -190,7 +250,11 @@ export function Chat({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
             rows={1}
-            placeholder="Posez une question sur vos documents…"
+            placeholder={
+              mode === "general"
+                ? "Posez n'importe quelle question…"
+                : "Posez une question sur vos documents…"
+            }
             className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 placeholder:text-muted focus:outline-none [field-sizing:content]"
           />
           {isStreaming ? (

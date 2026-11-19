@@ -162,8 +162,8 @@ describe("App", () => {
     await ask("Q2");
     await waitFor(() => expect(backend.chatBodies).toHaveLength(2));
 
-    expect(backend.chatBodies[0]).toEqual({ message: "Q1" });
-    expect(backend.chatBodies[1]).toEqual({ message: "Q2", conversation_id: "conv-1" });
+    expect(backend.chatBodies[0]).toEqual({ message: "Q1", mode: "documents" });
+    expect(backend.chatBodies[1]).toEqual({ message: "Q2", conversation_id: "conv-1", mode: "documents" });
   });
 
   it("restricts the search to the checked documents", async () => {
@@ -175,7 +175,47 @@ describe("App", () => {
     await ask("Q");
 
     await waitFor(() => expect(backend.chatBodies).toHaveLength(1));
-    expect(backend.chatBodies[0]).toEqual({ message: "Q", document_ids: ["doc-1"] });
+    expect(backend.chatBodies[0]).toEqual({ message: "Q", document_ids: ["doc-1"], mode: "documents" });
+  });
+
+  it("answers from general knowledge when that mode is chosen, and says so", async () => {
+    const backend = mockBackend({
+      chat: () =>
+        streamResponse(
+          sse([
+            ["meta", { conversation_id: "conv-1" }],
+            ["token", { text: "Paris est la capitale de la France." }],
+            ["sources", { sources: [] }],
+            ["done", { message_id: "m-1" }],
+          ]),
+        ),
+    });
+    render(<App />);
+    await screen.findByText("guide.pdf");
+
+    await userEvent.click(screen.getByRole("radio", { name: /Connaissances générales/ }));
+    expect(screen.getByLabelText("Votre question")).toHaveAttribute(
+      "placeholder",
+      "Posez n'importe quelle question…",
+    );
+    await ask("Capitale de la France ?");
+
+    expect(await screen.findByText("Réponse hors de vos documents, sans source")).toBeInTheDocument();
+    expect(backend.chatBodies[0]).toEqual({ message: "Capitale de la France ?", mode: "general" });
+    // The choice is remembered for the next visit.
+    expect(localStorage.getItem("chat_mode")).toBe("general");
+  });
+
+  it("does not flag cited answers or answers given in documents mode", async () => {
+    mockBackend();
+    render(<App />);
+    await screen.findByText("guide.pdf");
+
+    expect(screen.getByRole("radio", { name: /Mes documents/ })).toBeChecked();
+    await ask("Combien de congés ?");
+
+    await screen.findByRole("button", { name: /Voir la source 1/ });
+    expect(screen.queryByText("Réponse hors de vos documents, sans source")).not.toBeInTheDocument();
   });
 
   it("shows the error sent by the server in the stream", async () => {
@@ -233,7 +273,7 @@ describe("App", () => {
     await ask("Q2");
 
     await waitFor(() => expect(backend.chatBodies).toHaveLength(2));
-    expect(backend.chatBodies[1]).toEqual({ message: "Q2" });
+    expect(backend.chatBodies[1]).toEqual({ message: "Q2", mode: "documents" });
   });
 
   it("toggles dark mode and remembers the choice", async () => {

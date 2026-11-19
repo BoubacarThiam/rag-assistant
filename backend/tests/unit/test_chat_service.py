@@ -4,10 +4,15 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from app.services.chat import ChatEvent, chat_stream
+from app.services.chat import ChatEvent, ChatMode, chat_stream
 from app.services.conversations import InMemoryConversationStore
 from app.services.llm import FakeLLMProvider, LLMError
-from app.services.llm.prompts import REFUSAL_SENTENCE, SYSTEM_PROMPT
+from app.services.llm.prompts import (
+    GENERAL_SYSTEM_PROMPT,
+    NO_PASSAGES,
+    REFUSAL_SENTENCE,
+    SYSTEM_PROMPT,
+)
 from app.services.retrieval import SearchHit
 from tests.helpers import HITS
 
@@ -36,6 +41,7 @@ async def run(
     conversation_id: uuid.UUID | None = None,
     history_messages: int = 6,
     document_ids: list[uuid.UUID] | None = None,
+    mode: ChatMode = "documents",
 ) -> list[ChatEvent]:
     return [
         event
@@ -47,6 +53,7 @@ async def run(
             conversation_id=conversation_id,
             document_ids=document_ids,
             history_messages=history_messages,
+            mode=mode,
         )
     ]
 
@@ -207,3 +214,43 @@ async def test_document_filter_is_passed_to_the_retriever() -> None:
     )
 
     assert retriever.calls == [("Question ?", [doc_id])]
+
+
+async def test_general_mode_uses_the_general_prompt_and_saves_the_mode() -> None:
+    store = InMemoryConversationStore()
+    llm = FakeLLMProvider(chunks=["Paris est la capitale de la France."])
+
+    events = await run("Capitale de la France ?", store=store, llm=llm, mode="general")
+
+    assert llm.calls[0].system == GENERAL_SYSTEM_PROMPT
+    assert data(events, "sources") == {"sources": []}
+    conversation_id = uuid.UUID(data(events, "meta")["conversation_id"])
+    question, answer = store.conversations[conversation_id]
+    assert (question.mode, answer.mode) == (None, "general")
+
+
+async def test_general_mode_answers_even_without_any_passage() -> None:
+    llm = FakeLLMProvider(chunks=["La France, en 1998."])
+
+    events = await run(
+        "Qui a gagné la Coupe du monde 1998 ?",
+        store=InMemoryConversationStore(),
+        llm=llm,
+        retriever=FakeRetriever(hits=[]),
+        mode="general",
+    )
+
+    assert len(llm.calls) == 1  # unlike the documents mode, the LLM is called
+    assert NO_PASSAGES in llm.calls[0].messages[-1].content
+    assert "".join(e.data["text"] for e in events if e.event == "token") == "La France, en 1998."
+
+
+async def test_documents_mode_is_the_default_and_is_saved() -> None:
+    store = InMemoryConversationStore()
+    llm = FakeLLMProvider()
+
+    events = await run("Question ?", store=store, llm=llm)
+
+    assert llm.calls[0].system == SYSTEM_PROMPT
+    conversation_id = uuid.UUID(data(events, "meta")["conversation_id"])
+    assert store.conversations[conversation_id][-1].mode == "documents"
