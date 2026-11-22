@@ -4,14 +4,14 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query, Response, status
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import ConversationStoreDep, LLMDep, RetrieverDep, SettingsDep
 from app.core.errors import NotFoundError
-from app.schemas.chat import ChatRequest, MessageOut
+from app.schemas.chat import ChatRequest, ConversationOut, MessageOut
 from app.services.chat import ChatEvent, chat_stream
-from app.services.conversations import StoredMessage
+from app.services.conversations import ConversationSummary, StoredMessage
 
 router = APIRouter(tags=["chat"])
 
@@ -56,6 +56,20 @@ async def chat(
         # Proxies must not buffer or cache the stream, or tokens would arrive all at once.
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/conversations", response_model=list[ConversationOut])
+async def list_conversations(
+    store: ConversationStoreDep, limit: int = Query(default=50, ge=1, le=200)
+) -> list[ConversationSummary]:
+    return await store.recent(limit)
+
+
+@router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(conversation_id: uuid.UUID, store: ConversationStoreDep) -> Response:
+    if not await store.delete(conversation_id):
+        raise NotFoundError("Conversation introuvable.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])

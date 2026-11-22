@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import type { DocumentInfo, Source } from "./types";
+import type { ConversationSummary, DocumentInfo, Source, StoredMessage } from "./types";
 
 const DOCUMENT: DocumentInfo = {
   id: "doc-1",
@@ -51,6 +51,8 @@ const json = (data: unknown, status = 200) =>
 
 interface Backend {
   documents: DocumentInfo[];
+  conversations: ConversationSummary[];
+  messages: Record<string, StoredMessage[]>;
   chat: () => Response;
   chatBodies: unknown[];
 }
@@ -68,6 +70,8 @@ function mockBackend(overrides: Partial<Backend> = {}): Backend {
           ["done", { message_id: "m-1" }],
         ]),
       ),
+    conversations: [],
+    messages: {},
     chatBodies: [],
     ...overrides,
   };
@@ -82,6 +86,14 @@ function mockBackend(overrides: Partial<Backend> = {}): Backend {
       if (url.startsWith("/api/documents/") && init?.method === "DELETE") {
         return new Response(null, { status: 204 });
       }
+      if (url === "/api/conversations") return json(backend.conversations);
+      const conversation = url.match(/^\/api\/conversations\/([\w-]+)(\/messages)?$/);
+      if (conversation && init?.method === "DELETE") {
+        backend.conversations = backend.conversations.filter((c) => c.id !== conversation[1]);
+        return new Response(null, { status: 204 });
+      }
+      const stored = conversation?.[2] && backend.messages[conversation[1]!];
+      if (stored) return json(stored);
       return json({ detail: "Introuvable.", code: "not_found" }, 404);
     }),
   );
@@ -286,5 +298,98 @@ describe("App", () => {
     expect(localStorage.getItem("theme")).toBe("dark");
     await userEvent.click(screen.getByLabelText("Passer en mode clair"));
     expect(document.documentElement).not.toHaveClass("dark");
+  });
+
+  it("copies an answer to the clipboard", async () => {
+    mockBackend();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(<App />);
+    await screen.findByText("guide.pdf");
+    await ask("Q");
+    await screen.findByRole("button", { name: /Voir la source 1/ });
+
+    await userEvent.click(screen.getByRole("button", { name: "Copier la réponse" }));
+
+    expect(writeText).toHaveBeenCalledWith("Vous avez **25 jours** de congés [1].");
+    expect(await screen.findByText("Copié")).toBeInTheDocument();
+  });
+
+  it("asks a failed question again with Réessayer", async () => {
+    let calls = 0;
+    const backend = mockBackend();
+    const ok = backend.chat;
+    backend.chat = () => {
+      calls += 1;
+      return calls === 1
+        ? streamResponse(sse([["error", { detail: "Service indisponible.", code: "llm_unavailable" }]]))
+        : ok();
+    };
+    render(<App />);
+    await screen.findByText("guide.pdf");
+    await ask("Combien de congés ?");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Service indisponible.");
+
+    await userEvent.click(screen.getByRole("button", { name: "Réessayer" }));
+
+    await screen.findByRole("button", { name: /Voir la source 1/ });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Combien de congés ?")).toHaveLength(1); // replaced, not added
+    expect(backend.chatBodies[1]).toEqual(backend.chatBodies[0]);
+  });
+
+  it("puts a question back in the input to edit it", async () => {
+    mockBackend();
+    render(<App />);
+    await screen.findByText("guide.pdf");
+    await ask("Combien de congés ?");
+    await screen.findByRole("button", { name: /Voir la source 1/ });
+
+    await userEvent.click(screen.getByRole("button", { name: "Modifier la question" }));
+
+    const input = screen.getByLabelText("Votre question");
+    expect(input).toHaveValue("Combien de congés ?");
+    expect(input).toHaveFocus();
+  });
+
+  it("lists past conversations, opens one and deletes it", async () => {
+    const backend = mockBackend({
+      conversations: [{ id: "conv-9", title: "Télétravail ?", updated_at: "2026-11-20T08:00:00Z" }],
+      messages: {
+        "conv-9": [
+          { id: "u", role: "user", content: "Télétravail ?", sources: null, created_at: "2026-11-20T08:00:00Z" },
+          {
+            id: "a",
+            role: "assistant",
+            content: "Trois jours par semaine [1].",
+            sources: [SOURCE],
+            mode: "documents",
+            created_at: "2026-11-20T08:00:01Z",
+          },
+        ],
+      },
+    });
+    backend.chat = () =>
+      streamResponse(
+        sse([
+          ["meta", { conversation_id: "conv-9" }],
+          ["token", { text: "Non." }],
+          ["done", { message_id: "m-2" }],
+        ]),
+      );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /^Télétravail \?/ }));
+
+    expect(await screen.findByText(/Trois jours par semaine/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Télétravail \?/ })).toHaveAttribute("aria-current", "true");
+    await ask("Et le vendredi ?");
+    await waitFor(() => expect(backend.chatBodies).toHaveLength(1));
+    expect(backend.chatBodies[0]).toMatchObject({ conversation_id: "conv-9" });
+
+    await userEvent.click(screen.getByLabelText("Supprimer la conversation Télétravail ?"));
+
+    await waitFor(() => expect(screen.queryByText(/Trois jours par semaine/)).not.toBeInTheDocument());
+    expect(screen.getByText("Vos conversations apparaîtront ici.")).toBeInTheDocument();
   });
 });

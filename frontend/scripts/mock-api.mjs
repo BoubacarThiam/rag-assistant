@@ -151,6 +151,25 @@ createServer(async (req, res) => {
       res.writeHead(204);
       return res.end();
     }
+    if (pathname === "/conversations" && req.method === "GET") {
+      const list = [...conversations.entries()]
+        .filter(([, messages]) => messages.length > 0)
+        .map(([id, messages]) => ({
+          id,
+          title: messages[0].content.slice(0, 80),
+          updated_at: messages.at(-1).created_at,
+        }))
+        .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+      return send(res, 200, list);
+    }
+    const deleteMatch = pathname.match(/^\/conversations\/([\w-]+)$/);
+    if (deleteMatch && req.method === "DELETE") {
+      if (!conversations.delete(deleteMatch[1])) {
+        return send(res, 404, { detail: "Conversation introuvable.", code: "not_found" });
+      }
+      res.writeHead(204);
+      return res.end();
+    }
     const convMatch = pathname.match(/^\/conversations\/([\w-]+)\/messages$/);
     if (convMatch && req.method === "GET") {
       const messages = conversations.get(convMatch[1]);

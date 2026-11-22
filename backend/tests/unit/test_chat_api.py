@@ -112,3 +112,32 @@ async def test_unknown_mode_is_rejected(
 ) -> None:
     response = await client.post("/chat", json={"message": "Q", "mode": "web"})
     assert response.status_code == 422
+
+
+async def test_conversations_are_listed_most_recent_first(
+    client: AsyncClient, store: InMemoryConversationStore
+) -> None:
+    assert (await client.get("/conversations")).json() == []
+    await store.create()  # no exchange yet: not listed
+    first = parse_sse((await client.post("/chat", json={"message": "Première"})).text)
+    second = parse_sse((await client.post("/chat", json={"message": "Deuxième"})).text)
+
+    listed = (await client.get("/conversations")).json()
+
+    assert [c["title"] for c in listed] == ["Deuxième", "Première"]
+    assert listed[0]["id"] == second[0][1]["conversation_id"]
+    assert listed[1]["id"] == first[0][1]["conversation_id"]
+    assert len((await client.get("/conversations", params={"limit": 1})).json()) == 1
+
+
+async def test_a_conversation_can_be_deleted(
+    client: AsyncClient, store: InMemoryConversationStore
+) -> None:
+    events = parse_sse((await client.post("/chat", json={"message": "Bonjour"})).text)
+    conversation_id = events[0][1]["conversation_id"]
+
+    assert (await client.delete(f"/conversations/{conversation_id}")).status_code == 204
+    assert (await client.get("/conversations")).json() == []
+    missing = await client.delete(f"/conversations/{conversation_id}")
+    assert missing.status_code == 404
+    assert missing.json()["code"] == "not_found"

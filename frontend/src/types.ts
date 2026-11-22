@@ -37,6 +37,12 @@ export interface StoredMessage {
   created_at: string;
 }
 
+export interface ConversationSummary {
+  id: string;
+  title: string; // the first question
+  updated_at: string; // time of the last exchange
+}
+
 export type ChatEvent =
   | { event: "meta"; data: { conversation_id: string } }
   | { event: "token"; data: { text: string } }

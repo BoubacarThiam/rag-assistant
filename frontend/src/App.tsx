@@ -1,11 +1,13 @@
-import { Menu, Moon, Plus, Sun } from "lucide-react";
+import { Download, Menu, Moon, Plus, Sun } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Chat } from "./components/Chat";
 import { Sidebar } from "./components/Sidebar";
 import { SourcesPanel } from "./components/SourcesPanel";
 import { useChat } from "./hooks/useChat";
+import { useConversations } from "./hooks/useConversations";
 import { useDocuments } from "./hooks/useDocuments";
 import { useTheme } from "./hooks/useTheme";
+import { conversationToMarkdown, downloadText } from "./lib/exportMarkdown";
 
 interface ActiveSources {
   messageId: string;
@@ -16,6 +18,7 @@ export default function App() {
   const { theme, toggle: toggleTheme } = useTheme();
   const docs = useDocuments();
   const chat = useChat();
+  const history = useConversations();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeSources, setActiveSources] = useState<ActiveSources | null>(null);
@@ -42,6 +45,38 @@ export default function App() {
   const openSources = useCallback((messageId: string, index: number | null) => {
     setActiveSources({ messageId, index });
   }, []);
+
+  // Reload the list when an answer ends (new conversation, or one moved to the top).
+  const { refresh: refreshHistory } = history;
+  useEffect(() => {
+    if (!chat.isStreaming) void refreshHistory();
+  }, [chat.isStreaming, refreshHistory]);
+
+  const { reset, open } = chat;
+  const openConversation = useCallback(
+    async (id: string) => {
+      setActiveSources(null);
+      setSidebarOpen(false);
+      if (!(await open(id))) void refreshHistory(); // deleted meanwhile: drop it from the list
+    },
+    [open, refreshHistory],
+  );
+
+  const { remove: removeConversation } = history;
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      if ((await removeConversation(id)) && id === chat.conversationId) {
+        reset();
+        setActiveSources(null);
+      }
+    },
+    [removeConversation, reset, chat.conversationId],
+  );
+
+  function exportConversation() {
+    const day = new Date().toISOString().slice(0, 10);
+    downloadText(`conversation-${day}.md`, conversationToMarkdown(chat.messages));
+  }
 
   const sourcesMessage = activeSources
     ? chat.messages.find((m) => m.id === activeSources.messageId)
@@ -72,7 +107,7 @@ export default function App() {
         />
       )}
       <aside
-        aria-label="Documents"
+        aria-label="Conversations et documents"
         className={`fixed inset-y-0 left-0 z-40 w-80 max-w-[85vw] border-r border-border bg-surface transition-transform duration-200 md:static md:z-auto md:w-72 md:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
@@ -88,6 +123,10 @@ export default function App() {
           onDelete={docs.remove}
           onError={docs.reportError}
           onClose={() => setSidebarOpen(false)}
+          conversations={history.conversations}
+          activeConversationId={chat.conversationId}
+          onOpenConversation={(id) => void openConversation(id)}
+          onDeleteConversation={(id) => void deleteConversation(id)}
         />
       </aside>
 
@@ -96,7 +135,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            aria-label="Ouvrir la liste des documents"
+            aria-label="Ouvrir la liste des conversations et des documents"
             className={`${iconButton} md:hidden`}
           >
             <Menu className="size-5" aria-hidden />
@@ -114,6 +153,16 @@ export default function App() {
             <Plus className="size-4" aria-hidden />
             <span className="hidden sm:inline">Nouvelle conversation</span>
             <span className="sm:hidden">Nouveau</span>
+          </button>
+          <button
+            type="button"
+            onClick={exportConversation}
+            disabled={chat.messages.length === 0 || chat.isStreaming}
+            aria-label="Exporter la conversation en Markdown"
+            title="Exporter la conversation en Markdown"
+            className={`${iconButton} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            <Download className="size-5" aria-hidden />
           </button>
           <button
             type="button"
@@ -137,6 +186,7 @@ export default function App() {
           onModeChange={chat.setMode}
           onSend={(question) => void chat.send(question, documentFilter, chat.mode)}
           onStop={chat.stop}
+          onRetry={(answerId) => chat.retry(answerId, documentFilter, chat.mode)}
           onOpenSources={openSources}
         />
       </main>

@@ -1,6 +1,7 @@
 import { AlertCircle, FileText, Loader2, Trash2, X } from "lucide-react";
 import { formatSize, pluralize } from "../lib/format";
-import type { DocumentInfo } from "../types";
+import type { ConversationSummary, DocumentInfo } from "../types";
+import { ConversationList } from "./ConversationList";
 import { UploadDropzone } from "./UploadDropzone";
 
 interface Props {
@@ -14,6 +15,10 @@ interface Props {
   onDelete: (id: string) => void;
   onError: (message: string | null) => void;
   onClose: () => void;
+  conversations: ConversationSummary[];
+  activeConversationId: string | null;
+  onOpenConversation: (id: string) => void;
+  onDeleteConversation: (id: string) => void;
 }
 
 function DocumentRow({
@@ -87,22 +92,45 @@ export function Sidebar({
   onDelete,
   onError,
   onClose,
+  conversations,
+  activeConversationId,
+  onOpenConversation,
+  onDeleteConversation,
 }: Props) {
   const selectedCount = documents.filter((d) => selectedIds.has(d.id)).length;
 
   return (
     <div className="flex h-full flex-col gap-4 p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Documents</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Fermer le menu"
-          className="cursor-pointer rounded-md p-2 text-muted hover:bg-surface-2 md:hidden"
-        >
-          <X className="size-5" aria-hidden />
-        </button>
-      </div>
+      <section aria-labelledby="conversations-title" className="flex max-h-[35%] min-h-0 flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <h2
+            id="conversations-title"
+            className="text-sm font-semibold uppercase tracking-wide text-muted"
+          >
+            Conversations
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fermer le menu"
+            className="cursor-pointer rounded-md p-2 text-muted hover:bg-surface-2 md:hidden"
+          >
+            <X className="size-5" aria-hidden />
+          </button>
+        </div>
+        <div className="min-h-0 overflow-y-auto">
+          <ConversationList
+            conversations={conversations}
+            activeId={activeConversationId}
+            onOpen={onOpenConversation}
+            onDelete={onDeleteConversation}
+          />
+        </div>
+      </section>
+
+      <h2 className="border-t border-border pt-4 text-sm font-semibold uppercase tracking-wide text-muted">
+        Documents
+      </h2>
 
       <UploadDropzone uploading={uploading} onUpload={onUpload} onError={onError} />
 

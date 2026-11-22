@@ -1,4 +1,10 @@
-import type { ChatEvent, ChatMode, DocumentInfo, StoredMessage } from "../types";
+import type {
+  ChatEvent,
+  ChatMode,
+  ConversationSummary,
+  DocumentInfo,
+  StoredMessage,
+} from "../types";
 import { createSseParser } from "./sse";
 
 const BASE_URL: string = import.meta.env.VITE_API_URL ?? "/api";
@@ -55,6 +61,14 @@ export async function uploadDocuments(files: File[]): Promise<DocumentInfo[]> {
 
 export async function deleteDocument(id: string): Promise<void> {
   await request(`/documents/${id}`, { method: "DELETE" });
+}
+
+export async function listConversations(): Promise<ConversationSummary[]> {
+  return (await request("/conversations")).json();
+}
+
+export async function deleteConversation(id: string): Promise<void> {
+  await request(`/conversations/${id}`, { method: "DELETE" });
 }
 
 export async function getMessages(conversationId: string): Promise<StoredMessage[]> {

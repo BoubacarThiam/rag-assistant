@@ -1,8 +1,20 @@
-import { AlertCircle, ArrowUp, BookOpen, FileSearch, FileText, Globe, Square } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  BookOpen,
+  FileSearch,
+  FileText,
+  Globe,
+  Pencil,
+  RotateCcw,
+  Square,
+} from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { pluralize } from "../lib/format";
 import type { ChatMessage, ChatMode } from "../types";
 import { AnswerText } from "./AnswerText";
+import { CopyButton } from "./CopyButton";
 
 interface Props {
   messages: ChatMessage[];
@@ -12,6 +24,7 @@ interface Props {
   onModeChange: (mode: ChatMode) => void;
   onSend: (question: string) => void;
   onStop: () => void;
+  onRetry: (answerId: string) => void;
   onOpenSources: (messageId: string, index: number | null) => void;
 }
 
@@ -34,19 +47,42 @@ function ThinkingIndicator() {
   );
 }
 
+const actionButton =
+  "inline-flex h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-xs text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40";
+
 function MessageBubble({
   message,
+  busy,
   onOpenSources,
+  onRetry,
+  onEdit,
 }: {
   message: ChatMessage;
+  busy: boolean; // an answer is streaming: no new request can start
   onOpenSources: Props["onOpenSources"];
+  onRetry: () => void;
+  onEdit: () => void;
 }) {
   if (message.role === "user") {
     return (
-      <div className="animate-in flex justify-end">
+      <div className="animate-in group flex flex-col items-end gap-1">
         <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-on-primary">
           {message.content}
         </p>
+        <div className="flex gap-0.5 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+          <CopyButton text={message.content} label="Copier la question" />
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={busy}
+            aria-label="Modifier la question"
+            title="Remettre la question dans la zone de saisie pour la modifier"
+            className={actionButton}
+          >
+            <Pencil className="size-3.5" aria-hidden />
+            Modifier
+          </button>
+        </div>
       </div>
     );
   }
@@ -84,15 +120,32 @@ function MessageBubble({
           </p>
         )}
 
-        {message.sources.length > 0 && (
-          <button
-            type="button"
-            onClick={() => onOpenSources(message.id, null)}
-            className="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted transition-colors duration-150 hover:border-primary hover:text-primary"
-          >
-            <BookOpen className="size-3.5" aria-hidden />
-            {pluralize(message.sources.length, "source")}
-          </button>
+        {message.status !== "streaming" && (
+          <div className="mt-2 -mb-1 flex flex-wrap items-center gap-0.5">
+            {message.sources.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onOpenSources(message.id, null)}
+                className="mr-1 inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted transition-colors duration-150 hover:border-primary hover:text-primary"
+              >
+                <BookOpen className="size-3.5" aria-hidden />
+                {pluralize(message.sources.length, "source")}
+              </button>
+            )}
+            {message.content && <CopyButton text={message.content} label="Copier la réponse" />}
+            {message.status === "error" && (
+              <button
+                type="button"
+                onClick={onRetry}
+                disabled={busy}
+                aria-label="Réessayer"
+                className={actionButton}
+              >
+                <RotateCcw className="size-3.5" aria-hidden />
+                Réessayer
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -190,11 +243,30 @@ export function Chat({
   onModeChange,
   onSend,
   onStop,
+  onRetry,
   onOpenSources,
 }: Props) {
   const [draft, setDraft] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   const stickToBottom = useRef(true);
+  const [awayFromBottom, setAwayFromBottom] = useState(false);
+
+  function scrollToBottom() {
+    const element = scroller.current;
+    if (!element) return;
+    stickToBottom.current = true;
+    setAwayFromBottom(false);
+    element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+  }
+
+  function editQuestion(text: string) {
+    setDraft(text);
+    const element = input.current;
+    if (!element) return;
+    element.focus();
+    element.setSelectionRange(text.length, text.length);
+  }
 
   // Follow the stream, unless the user scrolled up to read something.
   useEffect(() => {
@@ -224,17 +296,38 @@ export function Chat({
         onScroll={(event) => {
           const el = event.currentTarget;
           stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          setAwayFromBottom(!stickToBottom.current);
         }}
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="relative min-h-0 flex-1 overflow-y-auto"
       >
         {messages.length === 0 ? (
           <EmptyState hasReadyDocuments={hasReadyDocuments} mode={mode} onPick={onSend} />
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6" aria-live="polite">
             {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} onOpenSources={onOpenSources} />
+              <MessageBubble
+                key={message.id}
+                message={message}
+                busy={isStreaming}
+                onOpenSources={onOpenSources}
+                onRetry={() => {
+                  stickToBottom.current = true;
+                  onRetry(message.id);
+                }}
+                onEdit={() => editQuestion(message.content)}
+              />
             ))}
           </div>
+        )}
+        {awayFromBottom && messages.length > 0 && (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            aria-label="Aller au dernier message"
+            className="sticky bottom-3 left-1/2 flex size-10 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-surface text-muted shadow-md transition-colors duration-150 hover:text-text"
+          >
+            <ArrowDown className="size-4" aria-hidden />
+          </button>
         )}
       </div>
 
@@ -245,6 +338,7 @@ export function Chat({
             Votre question
           </label>
           <textarea
+            ref={input}
             id="question"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}

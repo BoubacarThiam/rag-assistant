@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models import Conversation, Message, MessageRole
@@ -23,8 +23,23 @@ class StoredMessage:
     mode: str | None = None  # answer mode of an assistant message
 
 
+@dataclass(frozen=True)
+class ConversationSummary:
+    id: uuid.UUID
+    title: str
+    updated_at: datetime  # time of the last exchange
+
+
 class ConversationStore(Protocol):
     async def create(self) -> uuid.UUID: ...
+
+    async def recent(self, limit: int) -> list[ConversationSummary]:
+        """Conversations with at least one exchange, most recently active first."""
+        ...
+
+    async def delete(self, conversation_id: uuid.UUID) -> bool:
+        """Delete a conversation and its messages; False if it did not exist."""
+        ...
 
     async def exists(self, conversation_id: uuid.UUID) -> bool: ...
 
@@ -69,6 +84,25 @@ class SqlConversationStore:
         async with self._session_factory() as session:
             return await session.get(Conversation, conversation_id) is not None
 
+    async def recent(self, limit: int) -> list[ConversationSummary]:
+        stmt = (
+            select(Conversation)
+            .where(Conversation.title.is_not(None))
+            .order_by(Conversation.updated_at.desc())
+            .limit(limit)
+        )
+        async with self._session_factory() as session:
+            rows = await session.scalars(stmt)
+            return [ConversationSummary(c.id, c.title or "", c.updated_at) for c in rows]
+
+    async def delete(self, conversation_id: uuid.UUID) -> bool:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                delete(Conversation).where(Conversation.id == conversation_id)
+            )
+            await session.commit()
+            return bool(result.rowcount)  # type: ignore[attr-defined]
+
     async def messages(
         self, conversation_id: uuid.UUID, limit: int | None = None
     ) -> list[StoredMessage]:
@@ -101,6 +135,7 @@ class SqlConversationStore:
                 raise LookupError(f"conversation {conversation_id} not found")
             if conversation.title is None:
                 conversation.title = _title_from(question)
+            conversation.updated_at = datetime.now(UTC)  # orders the conversation list
             # Explicit timestamps: both rows are inserted in one transaction, so the database
             # clock (now()) would give them the same time and their order would be ambiguous.
             answer_message = Message(
@@ -139,6 +174,17 @@ class InMemoryConversationStore:
 
     async def exists(self, conversation_id: uuid.UUID) -> bool:
         return conversation_id in self.conversations
+
+    async def recent(self, limit: int) -> list[ConversationSummary]:
+        summaries = [
+            ConversationSummary(cid, _title_from(stored[0].content), stored[-1].created_at)
+            for cid, stored in self.conversations.items()
+            if stored
+        ]
+        return sorted(summaries, key=lambda c: c.updated_at, reverse=True)[:limit]
+
+    async def delete(self, conversation_id: uuid.UUID) -> bool:
+        return self.conversations.pop(conversation_id, None) is not None
 
     async def messages(
         self, conversation_id: uuid.UUID, limit: int | None = None

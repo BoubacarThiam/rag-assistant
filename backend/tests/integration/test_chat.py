@@ -73,3 +73,22 @@ async def test_without_documents_the_assistant_declines(
 
     assert events[1] == ("token", {"text": REFUSAL_SENTENCE})
     assert llm.calls == []
+
+
+async def test_conversation_list_and_delete(
+    client: AsyncClient, factory: async_sessionmaker[AsyncSession], llm: FakeLLMProvider
+) -> None:
+    first = parse_sse((await client.post("/chat", json={"message": "Première question"})).text)
+    second = parse_sse((await client.post("/chat", json={"message": "Seconde question"})).text)
+    first_id = first[0][1]["conversation_id"]
+    # Continuing the first conversation moves it back to the top.
+    await client.post("/chat", json={"message": "Suite", "conversation_id": first_id})
+
+    listed = (await client.get("/conversations")).json()
+    assert [c["title"] for c in listed] == ["Première question", "Seconde question"]
+
+    assert (await client.delete(f"/conversations/{first_id}")).status_code == 204
+    listed = (await client.get("/conversations")).json()
+    assert [c["id"] for c in listed] == [second[0][1]["conversation_id"]]
+    # Its messages went with it (ON DELETE CASCADE).
+    assert (await client.get(f"/conversations/{first_id}/messages")).status_code == 404

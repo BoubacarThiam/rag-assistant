@@ -31,3 +31,11 @@ class MessageOut(BaseModel):
     sources: list[dict[str, Any]] | None
     mode: Literal["documents", "general"] | None = None
     created_at: datetime
+
+
+class ConversationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    updated_at: datetime

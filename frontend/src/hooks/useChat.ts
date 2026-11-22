@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, getMessages, streamChat } from "../lib/api";
-import type { ChatEvent, ChatMessage, ChatMode } from "../types";
+import type { ChatEvent, ChatMessage, ChatMode, StoredMessage } from "../types";
 
 const STORAGE_KEY = "conversation_id";
 const MODE_KEY = "chat_mode";
@@ -34,11 +34,24 @@ function readStoredMode(): ChatMode {
   }
 }
 
+function toChatMessages(history: StoredMessage[]): ChatMessage[] {
+  return history.map((m) => ({
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    sources: m.sources ?? [],
+    ...(m.role === "assistant" && { mode: m.mode ?? "documents" }),
+    status: "done",
+  }));
+}
+
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setModeState] = useState<ChatMode>(readStoredMode);
   const [isStreaming, setIsStreaming] = useState(false);
   const conversationId = useRef<string | null>(null);
+  // Same value as the ref, as state: the sidebar highlights the open conversation.
+  const [activeId, setActiveId] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
 
   // Restore the previous conversation after a page reload.
@@ -50,16 +63,8 @@ export function useChat() {
       .then((history) => {
         if (cancelled) return;
         conversationId.current = stored;
-        setMessages(
-          history.map((m) => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            sources: m.sources ?? [],
-            ...(m.role === "assistant" && { mode: m.mode ?? "documents" }),
-            status: "done",
-          })),
-        );
+        setActiveId(stored);
+        setMessages(toChatMessages(history));
       })
       .catch(() => storeConversation(null)); // deleted or unreachable: start fresh
     return () => {
@@ -97,6 +102,7 @@ export function useChat() {
       switch (event) {
         case "meta":
           conversationId.current = data.conversation_id;
+          setActiveId(data.conversation_id);
           storeConversation(data.conversation_id);
           break;
         case "token":
@@ -136,6 +142,7 @@ export function useChat() {
         // A stored conversation that no longer exists on the server: forget it.
         if (error instanceof ApiError && error.status === 404) {
           conversationId.current = null;
+          setActiveId(null);
           storeConversation(null);
         }
         const detail = error instanceof ApiError ? error.message : GENERIC_ERROR;
@@ -149,12 +156,54 @@ export function useChat() {
 
   const stop = useCallback(() => abort.current?.abort(), []);
 
+  /** Ask again the question of a failed answer: the failed pair is replaced by a new one.
+   * (A failed answer is never stored by the server, so nothing is duplicated there.) */
+  const retry = useCallback(
+    (answerId: string, documentIds: string[], mode: ChatMode) => {
+      if (abort.current) return;
+      const index = messages.findIndex((m) => m.id === answerId);
+      const question = messages[index - 1];
+      if (index < 1 || question?.role !== "user") return;
+      setMessages((current) => current.filter((m) => m.id !== answerId && m.id !== question.id));
+      void send(question.content, documentIds, mode);
+    },
+    [messages, send],
+  );
+
   const reset = useCallback(() => {
     abort.current?.abort();
     conversationId.current = null;
+    setActiveId(null);
     storeConversation(null);
     setMessages([]);
   }, []);
 
-  return { messages, isStreaming, mode, setMode, send, stop, reset };
+  /** Show a past conversation; the next questions continue it. */
+  const open = useCallback(async (id: string): Promise<boolean> => {
+    abort.current?.abort();
+    let history: StoredMessage[];
+    try {
+      history = await getMessages(id);
+    } catch {
+      return false;
+    }
+    conversationId.current = id;
+    setActiveId(id);
+    storeConversation(id);
+    setMessages(toChatMessages(history));
+    return true;
+  }, []);
+
+  return {
+    messages,
+    isStreaming,
+    mode,
+    setMode,
+    send,
+    stop,
+    retry,
+    reset,
+    open,
+    conversationId: activeId,
+  };
 }

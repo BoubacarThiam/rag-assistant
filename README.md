@@ -31,7 +31,12 @@ L'objectif du projet n'est pas d'appeler une API, mais de construire un pipeline
     explicite quand la réponse n'y est pas ;
   - **Connaissances générales** : les PDF d'abord (cités) quand ils répondent, sinon les
     connaissances du modèle. Une réponse sans source est signalée « hors de vos documents ».
-- Conversations avec historique ; recherche vectorielle, plein texte ou hybride ; reranking optionnel.
+- Historique des conversations dans la barre latérale : rouvrir une conversation pour la
+  poursuivre, ou la supprimer.
+- Autour des messages : copier une réponse ou un bloc de code, « Réessayer » une réponse en
+  échec, « Modifier » une question (renvoyée dans la zone de saisie), export de la conversation
+  en Markdown avec ses sources, bouton pour revenir au dernier message.
+- Recherche vectorielle, plein texte ou hybride ; reranking optionnel.
 - Thème clair/sombre, interface utilisable sur mobile.
 
 ## Comment ça marche
@@ -211,6 +216,8 @@ sentence-transformers, SDK `anthropic`, `uv`.
 | `DELETE` | `/documents/{id}` | Supprimer un document et ses passages |
 | `POST` | `/search` | Recherche seule (sans génération) |
 | `POST` | `/chat` | Question → réponse en streaming SSE (`meta`, `sources`, `token`, `done`, `error`) |
+| `GET` | `/conversations` | Conversations récentes (titre = première question), la plus active d'abord |
+| `DELETE` | `/conversations/{id}` | Supprimer une conversation et ses messages |
 | `GET` | `/conversations/{id}/messages` | Historique d'une conversation |
 | `GET` | `/health` | État de l'API et de la base |
 
