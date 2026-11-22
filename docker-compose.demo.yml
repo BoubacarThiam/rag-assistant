@@ -21,9 +21,9 @@ services:
     ports:
       - "127.0.0.1:7860:7860" # also reachable locally, at http://localhost:7860
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7860/api/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7860/api/health', timeout=15)"]
       interval: 15s
-      timeout: 5s
+      timeout: 20s
       retries: 5
       start_period: 30s
     restart: unless-stopped

@@ -4,8 +4,9 @@ Every minute:
   1. Docker running? If not, start Docker Desktop and wait for it.
   2. Demo containers up? (`docker compose up -d` is cheap when they already are.)
   3. Public address answering? It is tested from the outside, like a visitor, on the
-     password-free health check. After 3 failures in a row, the tunnel is restarted: it
-     gets a new address.
+     password-free health check. After 3 rounds in a row with no answer from the app, the
+     tunnel is restarted: it gets a new address. A "degraded" answer (database unreachable)
+     is only logged: it comes from the app, so the tunnel works.
   4. Short link pointing to the current address? If not, it is updated (deploy/demo_link.py).
 
 Run it by hand:  python deploy/watchdog.py           (Ctrl+C to stop)
@@ -13,6 +14,7 @@ Start it at every Windows sign-in:  powershell -File deploy/install-watchdog.ps1
 Activity is written to demo-watchdog.log at the repository root.
 """
 
+import json
 import logging
 import socket
 import subprocess
@@ -100,13 +102,23 @@ def ensure_containers() -> None:
         log.warning("Démarrage des conteneurs : %s", exc)
 
 
-def is_online(url: str) -> bool:
+def public_health(url: str) -> str | None:
+    """The app's health status seen from the outside ("ok", "degraded"), or None when
+    nothing answers through the tunnel. "degraded" (database unreachable) is answered by
+    the app itself, so the tunnel works and recreating it would not help."""
     request = urllib.request.Request(f"{url}/api/health", headers={"User-Agent": "demo-watchdog"})
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            return bool(response.status == 200)
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read()
+    except urllib.error.HTTPError as exc:  # 503 = degraded, or an error page of Cloudflare
+        body = exc.read()
     except (urllib.error.URLError, TimeoutError, OSError):
-        return False
+        return None
+    try:
+        status = json.loads(body).get("status")
+    except (ValueError, AttributeError):
+        return None  # not the app's answer (e.g. Cloudflare "tunnel not found" page)
+    return status if isinstance(status, str) else None
 
 
 def restart_tunnel(old_url: str | None) -> str:
@@ -126,6 +138,7 @@ def update_link(url: str) -> None:
 
 def loop() -> None:
     failures = 0
+    degraded = False
     checked_url: str | None = None
     grace_until = 0.0
     while True:
@@ -139,10 +152,13 @@ def loop() -> None:
                 checked_url, failures = url, 0
                 grace_until = time.monotonic() + GRACE_AFTER_RESTART_S
             if time.monotonic() >= grace_until:
-                if is_online(url):
-                    if failures:
+                status = public_health(url)
+                if status is not None:
+                    if status == "ok" and (failures or degraded):
                         log.info("La démo répond de nouveau.")
-                    failures = 0
+                    elif status != "ok" and not degraded:
+                        log.warning("La démo répond, mais sa base de données est injoignable.")
+                    failures, degraded = 0, status != "ok"
                 else:
                     failures += 1
                     log.warning("Démo injoignable (%d/%d).", failures, FAILURES_BEFORE_RESTART)

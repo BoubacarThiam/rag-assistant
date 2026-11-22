@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     test_database_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag_test"
     # Separate database filled by `python -m eval.run` (created automatically).
     eval_database_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag_eval"
+    # How long /health waits for the database. A remote database (Neon) can need several
+    # seconds to open a connection, more when it wakes up or the network is slow.
+    db_check_timeout_s: float = Field(default=10.0, gt=0)
 
     # --- LLM ---
     # "anthropic" = Claude (default) | "openai_compatible" = any API with the OpenAI chat format
